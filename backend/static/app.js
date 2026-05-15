@@ -419,17 +419,7 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
-// ─── WhatsApp modal ──────────────────────────────────────────────────────────
-
-async function openWA() {
-  document.getElementById('wa-modal').classList.remove('hidden');
-  await loadWA();
-}
-
-function closeWA(e) {
-  if (!e || e.target === document.getElementById('wa-modal'))
-    document.getElementById('wa-modal').classList.add('hidden');
-}
+// ─── WhatsApp (dentro del panel admin) ───────────────────────────────────────
 
 async function loadWA() {
   const statusBar = document.getElementById('wa-status-bar');
@@ -483,7 +473,7 @@ async function adminFetch(path) {
   return r.json();
 }
 
-async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); }
+async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); loadWA(); }
 
 async function loadStats() {
   try {
