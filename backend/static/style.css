@@ -51,13 +51,13 @@ html, body { height: 100%; font-family: var(--font); background: var(--bg); colo
 
 .alex-sub { color: var(--muted); font-size: 12px; margin-bottom: 32px; text-transform: uppercase; letter-spacing: 1.5px; }
 
-#token-input {
+#username-input, #password-input {
   width: 100%; padding: 12px 14px;
   background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
   color: var(--text); font-size: 14px; outline: none;
   transition: border-color .15s; margin-bottom: 10px; font-family: var(--font);
 }
-#token-input:focus { border-color: var(--accent); }
+#username-input:focus, #password-input:focus { border-color: var(--accent); }
 
 #login-btn {
   width: 100%; padding: 12px;

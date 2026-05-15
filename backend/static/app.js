@@ -15,21 +15,32 @@ async function tryToken(t) {
 }
 
 async function login() {
-  const input = document.getElementById('token-input');
-  const t = input.value.trim();
-  if (!t) return;
+  const username = document.getElementById('username-input').value.trim();
+  const password = document.getElementById('password-input').value;
+  if (!username || !password) return;
 
   setAuthErr('');
   document.getElementById('login-btn').disabled = true;
 
-  if (await tryToken(t)) {
-    token = t;
-    localStorage.setItem('oc_token', t);
-    showApp();
-  } else {
-    setAuthErr('Token inválido o servidor no disponible.');
+  try {
+    const res = await fetch(`${API}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      token = data.token;
+      localStorage.setItem('oc_token', token);
+      showApp();
+    } else {
+      setAuthErr('Usuario o contraseña incorrectos.');
+      document.getElementById('login-btn').disabled = false;
+      document.getElementById('password-input').focus();
+    }
+  } catch {
+    setAuthErr('Error de conexión con el servidor.');
     document.getElementById('login-btn').disabled = false;
-    input.focus();
   }
 }
 
@@ -259,7 +270,10 @@ function renderMd(text) {
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
-document.getElementById('token-input')?.addEventListener('keydown', e => {
+document.getElementById('username-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('password-input').focus();
+});
+document.getElementById('password-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') login();
 });
 

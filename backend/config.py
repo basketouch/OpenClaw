@@ -5,6 +5,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     auth_secret: str = "change-me-please"
+    auth_username: str = "jorge"
+    auth_password: str = "change-me-please"
 
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-6"
