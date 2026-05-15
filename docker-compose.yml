@@ -9,6 +9,8 @@ services:
     volumes:
       - openclaw_workspace:/workspace
       - openclaw_data:/data
+      - /root/openclaw-app:/root/openclaw-app
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "127.0.0.1:8000:8000"
     healthcheck:
