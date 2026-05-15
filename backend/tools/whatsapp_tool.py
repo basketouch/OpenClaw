@@ -26,12 +26,46 @@ def _normalize_phone(phone: str) -> str:
     return f"{digits}@c.us"
 
 
-def _resolve_contact(name_or_phone: str) -> str:
+def _looks_like_phone(text: str) -> bool:
+    return bool(re.fullmatch(r"[\d\s\+\-\(\)]{6,}", text))
+
+
+async def _search_waha_contact(query: str) -> str | None:
+    """Search WAHA contacts by name; returns chatId (xxx@c.us) or None."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_waha()}/api/contacts/all",
+                params={"session": _session()},
+            )
+            contacts = r.json()
+        if not isinstance(contacts, list):
+            return None
+        q = query.lower().strip()
+        for c in contacts:
+            name = (c.get("name") or c.get("pushname") or "").lower()
+            if q == name or q in name or name in q:
+                return c.get("id")
+    except Exception:
+        pass
+    return None
+
+
+async def _resolve_contact(name_or_phone: str) -> str:
+    # 1. Check configured aliases first
     contacts = get_settings().whatsapp_contacts
     q = name_or_phone.lower().strip()
     for c in contacts:
         if c.name.lower() == q:
             return _normalize_phone(c.phone)
+
+    # 2. If it looks like a name (not a phone number), search WAHA contacts
+    if not _looks_like_phone(name_or_phone):
+        waha_id = await _search_waha_contact(name_or_phone)
+        if waha_id:
+            return waha_id
+
+    # 3. Treat as phone number
     return _normalize_phone(name_or_phone)
 
 
@@ -72,7 +106,7 @@ SEND_MSG_DEF = {
         "properties": {
             "to": {
                 "type": "string",
-                "description": "Nombre del contacto (de la lista configurada) o número completo con código de país (ej: 34612345678)",
+                "description": "Nombre del contacto (busca en la agenda del móvil) o número completo con código de país (ej: 34612345678)",
             },
             "message": {
                 "type": "string",
@@ -85,7 +119,7 @@ SEND_MSG_DEF = {
 
 
 async def send_whatsapp_message(to: str, message: str) -> dict:
-    chat_id = _resolve_contact(to)
+    chat_id = await _resolve_contact(to)
     payload = {"session": _session(), "chatId": chat_id, "text": message}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -104,7 +138,7 @@ SEND_VOICE_DEF = {
         "properties": {
             "to": {
                 "type": "string",
-                "description": "Nombre del contacto o número completo con código de país",
+                "description": "Nombre del contacto (busca en la agenda del móvil) o número completo con código de país",
             },
             "text": {
                 "type": "string",
@@ -122,7 +156,7 @@ SEND_VOICE_DEF = {
 
 async def send_whatsapp_voice(to: str, text: str, voice: str | None = None) -> dict:
     voice = voice or get_settings().tts_voice
-    chat_id = _resolve_contact(to)
+    chat_id = await _resolve_contact(to)
     try:
         ogg_data = await _tts_ogg(text, voice)
         b64 = base64.b64encode(ogg_data).decode()
@@ -167,7 +201,7 @@ async def whatsapp_status() -> dict:
 
 LIST_WA_CONTACTS_DEF = {
     "name": "list_whatsapp_contacts",
-    "description": "Muestra los contactos de WhatsApp configurados.",
+    "description": "Muestra los contactos configurados como alias. Para buscar en la agenda completa del móvil usa search_whatsapp_contacts.",
     "input_schema": {"type": "object", "properties": {}, "required": []},
 }
 
@@ -175,5 +209,48 @@ LIST_WA_CONTACTS_DEF = {
 def list_whatsapp_contacts() -> dict:
     contacts = get_settings().whatsapp_contacts
     if not contacts:
-        return {"contactos": [], "mensaje": "No hay contactos WhatsApp configurados en .env"}
+        return {"contactos": [], "mensaje": "No hay alias configurados. Puedes enviar mensajes usando el nombre del contacto tal como aparece en tu agenda de WhatsApp."}
     return {"contactos": [{"nombre": c.name, "telefono": c.phone} for c in contacts]}
+
+
+SEARCH_WA_CONTACTS_DEF = {
+    "name": "search_whatsapp_contacts",
+    "description": "Busca contactos por nombre en la agenda real del móvil vinculado a WhatsApp. Útil para encontrar el número de alguien antes de enviarle un mensaje.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Nombre o parte del nombre del contacto a buscar",
+            },
+        },
+        "required": ["query"],
+    },
+}
+
+
+async def search_whatsapp_contacts(query: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                f"{_waha()}/api/contacts/all",
+                params={"session": _session()},
+            )
+            all_contacts = r.json()
+        if not isinstance(all_contacts, list):
+            return {"error": "Respuesta inesperada de WAHA", "raw": str(all_contacts)[:200]}
+        q = query.lower().strip()
+        results = []
+        for c in all_contacts:
+            name = c.get("name") or c.get("pushname") or ""
+            if q in name.lower():
+                results.append({
+                    "nombre": name,
+                    "pushname": c.get("pushname"),
+                    "id": c.get("id"),
+                })
+        if not results:
+            return {"encontrados": 0, "mensaje": f"No se encontraron contactos con '{query}'"}
+        return {"encontrados": len(results), "contactos": results[:10]}
+    except Exception as e:
+        return {"error": str(e)}
