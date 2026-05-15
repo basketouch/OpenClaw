@@ -278,3 +278,7 @@ document.getElementById('password-input')?.addEventListener('keydown', e => {
 });
 
 init();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
