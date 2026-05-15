@@ -4,3 +4,4 @@ anthropic==0.40.0
 pydantic-settings==2.6.1
 python-multipart==0.0.12
 pytz==2024.2
+imap-tools==1.8.0

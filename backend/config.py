@@ -1,6 +1,13 @@
 from functools import lru_cache
 from typing import Optional
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+
+
+class GmailAccount(BaseModel):
+    name: str
+    email: str
+    password: str  # App Password de Google
 
 
 class Settings(BaseSettings):
@@ -13,6 +20,8 @@ class Settings(BaseSettings):
 
     workspace_path: str = "/opt/openclaw/workspace"
     debug: bool = False
+
+    gmail_accounts: list[GmailAccount] = []
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
