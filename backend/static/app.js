@@ -373,6 +373,7 @@ async function loadContainers() {
   const el = document.getElementById('admin-containers');
   try {
     const d = await adminFetch('/api/admin/containers');
+    if (d.error) { el.innerHTML = `<p class="no-items" style="color:var(--err)">${esc(d.error)}</p>`; return; }
     if (!d.containers.length) { el.innerHTML = '<p class="no-items">Sin contenedores</p>'; return; }
     el.innerHTML = d.containers.map(c => `
       <div class="container-row">
