@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Alex — OpenClaw</title>
   <link rel="stylesheet" href="/style.css">
-  <!-- PWA -->
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon.png">
   <meta name="theme-color" content="#111113">
@@ -34,49 +33,71 @@
 
 <!-- App -->
 <div id="app" class="hidden">
-  <header>
-    <div class="hdr-left">
-      <span class="hdr-icon">⚡</span>
-      <div>
-        <div class="hdr-title">Alex</div>
-        <div class="hdr-sub">OpenClaw</div>
+  <div class="app-layout">
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-hdr">
+        <span class="sidebar-title">Conversaciones</span>
+        <button class="btn-icon" onclick="startNewChat()" title="Nueva conversación">⊕</button>
       </div>
-    </div>
-    <div class="hdr-right">
-      <span id="status-dot" class="dot"></span>
-      <button class="btn-icon" onclick="openWA()" title="WhatsApp">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.533 5.858L.057 23.486a.5.5 0 00.609.61l5.79-1.517A11.95 11.95 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.938a9.927 9.927 0 01-5.073-1.389l-.363-.215-3.763.986.998-3.662-.236-.375A9.938 9.938 0 012.062 12C2.062 6.509 6.509 2.062 12 2.062S21.938 6.509 21.938 12 17.491 21.938 12 21.938z"/></svg>
-      </button>
-      <button class="btn-icon" onclick="openAdmin()" title="Administración">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      </button>
-      <button class="btn-icon" onclick="newChat()" title="Nueva conversación">⊕</button>
-      <button class="btn-icon" onclick="logout()" title="Cerrar sesión">↩</button>
-    </div>
-  </header>
+      <div id="chat-list" class="chat-list">
+        <p class="no-chats">Cargando…</p>
+      </div>
+    </aside>
 
-  <main id="chat">
-    <div id="messages"></div>
-  </main>
+    <!-- Main area -->
+    <div class="main-area">
+      <header>
+        <div class="hdr-left">
+          <button class="btn-icon sidebar-toggle" onclick="toggleSidebar()" title="Conversaciones">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <span class="hdr-icon">⚡</span>
+          <div>
+            <div class="hdr-title">Alex</div>
+            <div class="hdr-sub" id="chat-title-hdr">OpenClaw</div>
+          </div>
+        </div>
+        <div class="hdr-right">
+          <span id="status-dot" class="dot"></span>
+          <button class="btn-icon" onclick="openWA()" title="WhatsApp">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.533 5.858L.057 23.486a.5.5 0 00.609.61l5.79-1.517A11.95 11.95 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.938a9.927 9.927 0 01-5.073-1.389l-.363-.215-3.763.986.998-3.662-.236-.375A9.938 9.938 0 012.062 12C2.062 6.509 6.509 2.062 12 2.062S21.938 6.509 21.938 12 17.491 21.938 12 21.938z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="openAdmin()" title="Administración">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </button>
+          <button class="btn-icon" onclick="logout()" title="Cerrar sesión">↩</button>
+        </div>
+      </header>
 
-  <footer>
-    <div class="input-wrap">
-      <textarea
-        id="msg-input"
-        placeholder="Escribe un mensaje…"
-        rows="1"
-        onkeydown="onKey(event)"
-        oninput="resize(this)"
-      ></textarea>
-      <button id="send-btn" onclick="sendMessage()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-      </button>
-    </div>
-  </footer>
-</div>
+      <main id="chat">
+        <div id="messages"></div>
+      </main>
+
+      <footer>
+        <div class="input-wrap">
+          <textarea
+            id="msg-input"
+            placeholder="Escribe un mensaje…"
+            rows="1"
+            onkeydown="onKey(event)"
+            oninput="resize(this)"
+          ></textarea>
+          <button id="send-btn" onclick="sendMessage()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+      </footer>
+    </div><!-- main-area -->
+  </div><!-- app-layout -->
+</div><!-- app -->
 
 <!-- WhatsApp modal -->
 <div id="wa-modal" class="modal hidden" onclick="closeWA(event)">
@@ -104,39 +125,28 @@
     <button class="btn-icon" onclick="closeAdmin()">✕</button>
   </div>
   <div class="admin-body">
-
-    <!-- System stats -->
     <div class="admin-section">
       <div class="admin-section-title">Sistema</div>
-      <div id="admin-stats" class="stat-grid">
+      <div class="stat-grid">
         <div class="stat-item"><span class="stat-label">Disco</span><span id="s-disk" class="stat-val">…</span></div>
         <div class="stat-item"><span class="stat-label">RAM</span><span id="s-mem" class="stat-val">…</span></div>
         <div class="stat-item"><span class="stat-label">Carga</span><span id="s-load" class="stat-val">…</span></div>
         <div class="stat-item"><span class="stat-label">Uptime</span><span id="s-uptime" class="stat-val">…</span></div>
       </div>
     </div>
-
-    <!-- Containers -->
     <div class="admin-section">
       <div class="admin-section-title">Contenedores</div>
       <div id="admin-containers">…</div>
     </div>
-
-    <!-- Scheduled tasks -->
     <div class="admin-section">
       <div class="admin-section-title">Tareas programadas</div>
       <div id="admin-tasks">…</div>
     </div>
-
-    <!-- Deploy -->
     <div class="admin-section">
       <div class="admin-section-title">Deploy</div>
-      <button class="admin-btn deploy-btn" onclick="doDeploy()">
-        ↑ Actualizar a la última versión
-      </button>
+      <button class="admin-btn deploy-btn" onclick="doDeploy()">↑ Actualizar a la última versión</button>
       <p id="deploy-msg" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center"></p>
     </div>
-
   </div>
 </div>
 
