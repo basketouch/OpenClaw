@@ -32,6 +32,10 @@ from tools.email_tool import (
     list_emails, search_emails, read_email,
     send_email, reply_email, list_email_accounts,
 )
+from tools.whatsapp_tool import (
+    SEND_MSG_DEF, SEND_VOICE_DEF, WA_STATUS_DEF, LIST_WA_CONTACTS_DEF,
+    send_whatsapp_message, send_whatsapp_voice, whatsapp_status, list_whatsapp_contacts,
+)
 
 register("get_datetime", get_datetime, DATETIME_DEF)
 register("list_workspace_files", list_workspace_files, LIST_DEF)
@@ -43,3 +47,7 @@ register("search_emails", search_emails, SEARCH_EMAILS_DEF)
 register("read_email", read_email, READ_EMAIL_DEF)
 register("send_email", send_email, SEND_EMAIL_DEF)
 register("reply_email", reply_email, REPLY_EMAIL_DEF)
+register("send_whatsapp_message", send_whatsapp_message, SEND_MSG_DEF)
+register("send_whatsapp_voice", send_whatsapp_voice, SEND_VOICE_DEF)
+register("whatsapp_status", whatsapp_status, WA_STATUS_DEF)
+register("list_whatsapp_contacts", list_whatsapp_contacts, LIST_WA_CONTACTS_DEF)

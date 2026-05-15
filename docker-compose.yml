@@ -17,7 +17,28 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      - waha
+
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: waha
+    restart: unless-stopped
+    environment:
+      - WHATSAPP_DEFAULT_ENGINE=NOWEB
+      - WAHA_PRINT_QR=false
+    volumes:
+      - waha_data:/app/.sessions
+    networks:
+      - default
+      - n8n-infra
+
+networks:
+  n8n-infra:
+    external: true
+    name: n8n-infra_default
 
 volumes:
   openclaw_workspace:
   openclaw_data:
+  waha_data:
