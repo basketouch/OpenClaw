@@ -96,10 +96,12 @@ def list_emails(
 ) -> dict:
     acc = _get_account(account)
     limit = min(limit, 20)
-    criteria = A(seen=False) if solo_no_leidos else A()
     try:
         with MailBox(IMAP_HOST).login(acc.email, acc.password, folder) as mb:
-            msgs = list(mb.fetch(criteria, limit=limit, bulk=True, mark_seen=False, reverse=True))
+            if solo_no_leidos:
+                msgs = list(mb.fetch(A(seen=False), limit=limit, bulk=True, mark_seen=False, reverse=True))
+            else:
+                msgs = list(mb.fetch(limit=limit, bulk=True, mark_seen=False, reverse=True))
         return {"cuenta": acc.email, "carpeta": folder, "total": len(msgs), "emails": [_msg_summary(m) for m in msgs]}
     except Exception as e:
         return {"error": str(e)}
@@ -135,13 +137,14 @@ def search_emails(
     limit = min(limit, 20)
     fecha_desde = date.today() - timedelta(days=dias)
 
-    criteria = A(date_gte=fecha_desde)
+    kwargs: dict = {"date_gte": fecha_desde}
     if de:
-        criteria = A(criteria, from_=de)
+        kwargs["from_"] = de
     if asunto:
-        criteria = A(criteria, subject=asunto)
+        kwargs["subject"] = asunto
     if texto:
-        criteria = A(criteria, text=texto)
+        kwargs["text"] = texto
+    criteria = A(**kwargs)
 
     try:
         with MailBox(IMAP_HOST).login(acc.email, acc.password) as mb:
