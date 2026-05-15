@@ -1,0 +1,23 @@
+# Reemplaza openclaw.tudominio.com con tu subdominio real
+openclaw.tudominio.com {
+    reverse_proxy localhost:8000 {
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+    }
+
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output file /opt/openclaw/logs/caddy-access.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+        format json
+    }
+}

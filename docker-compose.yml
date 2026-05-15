@@ -1,0 +1,23 @@
+services:
+  openclaw:
+    build: ./backend
+    container_name: openclaw
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - WORKSPACE_PATH=/workspace
+    volumes:
+      - openclaw_workspace:/workspace
+      - openclaw_data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  openclaw_workspace:
+  openclaw_data:

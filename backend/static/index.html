@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alex — OpenClaw</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- Auth -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="brand">
+      <span class="brand-icon">⚡</span>
+      <span class="brand-name">OpenClaw</span>
+    </div>
+    <h1 class="alex-name">Alex</h1>
+    <p class="alex-sub">Asistente Operativo</p>
+    <input id="token-input" type="password" placeholder="Token de acceso" autocomplete="current-password">
+    <button id="login-btn" onclick="login()">Entrar</button>
+    <p id="auth-error" class="auth-err"></p>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+  <header>
+    <div class="hdr-left">
+      <span class="hdr-icon">⚡</span>
+      <div>
+        <div class="hdr-title">Alex</div>
+        <div class="hdr-sub">OpenClaw</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <span id="status-dot" class="dot"></span>
+      <button class="btn-icon" onclick="newChat()" title="Nueva conversación">⊕</button>
+      <button class="btn-icon" onclick="logout()" title="Cerrar sesión">↩</button>
+    </div>
+  </header>
+
+  <main id="chat">
+    <div id="messages"></div>
+  </main>
+
+  <footer>
+    <div class="input-wrap">
+      <textarea
+        id="msg-input"
+        placeholder="Escribe un mensaje…"
+        rows="1"
+        onkeydown="onKey(event)"
+        oninput="resize(this)"
+      ></textarea>
+      <button id="send-btn" onclick="sendMessage()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+  </footer>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
