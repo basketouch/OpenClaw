@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 import scheduler as sched
-from routers import auth, chat, health, whatsapp
+from routers import admin, auth, chat, health, whatsapp
 
 
 def _make_png(width: int, height: int, r: int, g: int, b: int) -> bytes:
@@ -56,6 +56,7 @@ app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(whatsapp.router)
+app.include_router(admin.router)
 
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):

@@ -304,33 +304,140 @@ async function loadWA() {
   qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px">Cargando QR…</p>';
 
   try {
-    const r = await fetch('/api/whatsapp/status', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const r = await fetch('/api/whatsapp/status', { headers: { Authorization: `Bearer ${token}` } });
     const data = await r.json();
     const connected = data.conectado || data.status === 'WORKING';
     const estado = data.estado || data.status || 'UNKNOWN';
-
     if (connected) {
       statusBar.innerHTML = `<div class="wa-status ok">● Conectado — ${esc(estado)}</div>`;
       qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
       return;
     }
-
     statusBar.innerHTML = `<div class="wa-status err">● Desconectado — ${esc(estado)}</div>`;
   } catch {
     statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
   }
 
   try {
-    const r = await fetch('/api/whatsapp/qr', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    qrArea.innerHTML = `<img src="${url}" alt="QR WhatsApp">`;
+    qrArea.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="QR WhatsApp">`;
   } catch (e) {
     qrArea.innerHTML = `<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ${esc(e.message)}</p>`;
+  }
+}
+
+// ─── Admin panel ─────────────────────────────────────────────────────────────
+
+function openAdmin() {
+  document.getElementById('admin-overlay').classList.remove('hidden');
+  document.getElementById('admin-panel').classList.remove('hidden');
+  requestAnimationFrame(() => document.getElementById('admin-panel').classList.add('open'));
+  loadAdminData();
+}
+
+function closeAdmin() {
+  const panel = document.getElementById('admin-panel');
+  panel.classList.remove('open');
+  setTimeout(() => {
+    panel.classList.add('hidden');
+    document.getElementById('admin-overlay').classList.add('hidden');
+  }, 250);
+}
+
+async function adminFetch(path) {
+  const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  return r.json();
+}
+
+async function loadAdminData() {
+  loadStats();
+  loadContainers();
+  loadTasks();
+}
+
+async function loadStats() {
+  try {
+    const d = await adminFetch('/api/admin/stats');
+    document.getElementById('s-disk').textContent = d.disk || '—';
+    document.getElementById('s-mem').textContent = d.memory || '—';
+    document.getElementById('s-load').textContent = d.load || '—';
+    document.getElementById('s-uptime').textContent = d.uptime || '—';
+  } catch {
+    document.getElementById('s-disk').textContent = 'error';
+  }
+}
+
+async function loadContainers() {
+  const el = document.getElementById('admin-containers');
+  try {
+    const d = await adminFetch('/api/admin/containers');
+    if (!d.containers.length) { el.innerHTML = '<p class="no-items">Sin contenedores</p>'; return; }
+    el.innerHTML = d.containers.map(c => `
+      <div class="container-row">
+        <span class="container-name">${esc(c.name)}</span>
+        <span class="container-status ${c.up ? 'status-up' : 'status-down'}">${c.up ? '● Activo' : '● Parado'}</span>
+      </div>`).join('');
+  } catch { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
+}
+
+async function loadTasks() {
+  const el = document.getElementById('admin-tasks');
+  try {
+    const d = await adminFetch('/api/admin/tasks');
+    if (!d.tasks.length) { el.innerHTML = '<p class="no-items">No hay tareas programadas</p>'; return; }
+    el.innerHTML = d.tasks.map(t => {
+      const sched = t.schedule_type === 'cron'
+        ? 'Cron: ' + JSON.stringify(t.schedule_params)
+        : 'Cada: ' + JSON.stringify(t.schedule_params);
+      const label = t.enabled ? 'Pausar' : 'Activar';
+      return `<div class="task-row">
+        <div class="task-info">
+          <div class="task-name">${esc(t.name)}</div>
+          <div class="task-schedule">${esc(sched)}</div>
+        </div>
+        <div class="task-actions">
+          <button class="task-btn" onclick="toggleTask('${t.id}',${!t.enabled})">${label}</button>
+          <button class="task-btn danger" onclick="deleteTask('${t.id}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
+}
+
+async function toggleTask(id, enabled) {
+  await fetch(`/api/admin/tasks/${id}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  if (!confirm('¿Eliminar esta tarea?')) return;
+  await fetch(`/api/admin/tasks/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  loadTasks();
+}
+
+async function doDeploy() {
+  const btn = document.querySelector('.deploy-btn');
+  const msg = document.getElementById('deploy-msg');
+  btn.disabled = true;
+  btn.textContent = 'Iniciando…';
+  try {
+    const d = await fetch('/api/admin/deploy', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json());
+    msg.textContent = d.message;
+    btn.textContent = '✓ Deploy iniciado';
+  } catch {
+    btn.disabled = false;
+    btn.textContent = '↑ Actualizar a la última versión';
+    msg.textContent = 'Error al iniciar deploy';
   }
 }
