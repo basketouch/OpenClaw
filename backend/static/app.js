@@ -61,7 +61,7 @@ async function init() {
     localStorage.removeItem('oc_token');
     token = '';
   }
-  document.getElementById('token-input').focus();
+  document.getElementById('username-input').focus();
 }
 
 function showApp() {
@@ -281,4 +281,56 @@ init();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+// ─── WhatsApp modal ──────────────────────────────────────────────────────────
+
+async function openWA() {
+  document.getElementById('wa-modal').classList.remove('hidden');
+  await loadWA();
+}
+
+function closeWA(e) {
+  if (!e || e.target === document.getElementById('wa-modal')) {
+    document.getElementById('wa-modal').classList.add('hidden');
+  }
+}
+
+async function loadWA() {
+  const statusBar = document.getElementById('wa-status-bar');
+  const qrArea = document.getElementById('wa-qr-area');
+
+  statusBar.innerHTML = '<div class="wa-status mid">Comprobando conexión…</div>';
+  qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px">Cargando QR…</p>';
+
+  try {
+    const r = await fetch('/api/whatsapp/status', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = await r.json();
+    const connected = data.conectado || data.status === 'WORKING';
+    const estado = data.estado || data.status || 'UNKNOWN';
+
+    if (connected) {
+      statusBar.innerHTML = `<div class="wa-status ok">● Conectado — ${esc(estado)}</div>`;
+      qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
+      return;
+    }
+
+    statusBar.innerHTML = `<div class="wa-status err">● Desconectado — ${esc(estado)}</div>`;
+  } catch {
+    statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
+  }
+
+  try {
+    const r = await fetch('/api/whatsapp/qr', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    qrArea.innerHTML = `<img src="${url}" alt="QR WhatsApp">`;
+  } catch (e) {
+    qrArea.innerHTML = `<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ${esc(e.message)}</p>`;
+  }
 }
