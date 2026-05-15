@@ -37,6 +37,10 @@ from tools.whatsapp_tool import (
     send_whatsapp_message, send_whatsapp_voice, whatsapp_status, list_whatsapp_contacts,
     search_whatsapp_contacts,
 )
+from tools.scheduler_tool import (
+    CREATE_DEF, LIST_DEF, DELETE_DEF, TOGGLE_DEF,
+    create_scheduled_task, list_scheduled_tasks, delete_scheduled_task, toggle_scheduled_task,
+)
 
 register("get_datetime", get_datetime, DATETIME_DEF)
 register("list_workspace_files", list_workspace_files, LIST_DEF)
@@ -53,3 +57,7 @@ register("send_whatsapp_voice", send_whatsapp_voice, SEND_VOICE_DEF)
 register("whatsapp_status", whatsapp_status, WA_STATUS_DEF)
 register("list_whatsapp_contacts", list_whatsapp_contacts, LIST_WA_CONTACTS_DEF)
 register("search_whatsapp_contacts", search_whatsapp_contacts, SEARCH_WA_CONTACTS_DEF)
+register("create_scheduled_task", create_scheduled_task, CREATE_DEF)
+register("list_scheduled_tasks", list_scheduled_tasks, LIST_DEF)
+register("delete_scheduled_task", delete_scheduled_task, DELETE_DEF)
+register("toggle_scheduled_task", toggle_scheduled_task, TOGGLE_DEF)

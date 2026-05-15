@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+import scheduler as sched
 from routers import auth, chat, health, whatsapp
 
 
@@ -36,7 +37,9 @@ async def lifespan(app: FastAPI):
         png = _make_png(180, 180, 124, 58, 237)  # #7c3aed purple
         with open(icon_path, "wb") as f:
             f.write(png)
+    sched.start()
     yield
+    sched.stop()
 
 
 app = FastAPI(title="OpenClaw", docs_url=None, redoc_url=None, lifespan=lifespan)
