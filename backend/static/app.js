@@ -3,6 +3,7 @@ let token = localStorage.getItem('oc_token') || '';
 let history = [];
 let busy = false;
 let currentChatId = null;
+let pendingFile = null; // { file_id, filename, mime_type, size }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -245,7 +246,45 @@ function resize(el) {
 }
 
 function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  // Enter just inserts a newline; use the send button to send
+}
+
+// ─── File upload ─────────────────────────────────────────────────────────────
+
+async function pickFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*,.pdf,.txt,.md,.csv';
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+    const preview = document.getElementById('attach-preview');
+    preview.innerHTML = `<span class="attach-name">📎 ${esc(file.name)}</span><span class="attach-loading">Subiendo…</span>`;
+    preview.classList.remove('hidden');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      pendingFile = await r.json();
+      preview.innerHTML = `<span class="attach-name">📎 ${esc(pendingFile.filename)}</span><button class="attach-del" onclick="clearAttachment()">✕</button>`;
+    } catch (e) {
+      preview.innerHTML = `<span class="attach-err">Error al subir: ${esc(e.message)}</span><button class="attach-del" onclick="clearAttachment()">✕</button>`;
+      pendingFile = null;
+    }
+  };
+  input.click();
+}
+
+function clearAttachment() {
+  pendingFile = null;
+  const preview = document.getElementById('attach-preview');
+  preview.classList.add('hidden');
+  preview.innerHTML = '';
 }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
@@ -254,14 +293,18 @@ async function sendMessage() {
   if (busy) return;
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
-  if (!text) return;
+  if (!text && !pendingFile) return;
 
+  const msgText = text || `[Archivo: ${pendingFile?.filename}]`;
   input.value = '';
   resize(input);
   document.querySelector('.welcome')?.remove();
 
-  history.push({ role: 'user', content: text });
-  appendUserMsg(text);
+  history.push({ role: 'user', content: msgText });
+  appendUserMsg(msgText, true, pendingFile);
+
+  const filePayload = pendingFile ? { ...pendingFile } : null;
+  clearAttachment();
 
   busy = true;
   setDisabled(true);
@@ -271,11 +314,17 @@ async function sendMessage() {
   let responseText = '';
 
   try {
-    const contextMessages = history.slice(-20); // last 20 messages for context
+    const contextMessages = history.slice(-20);
+    const body = { messages: contextMessages };
+    if (filePayload) {
+      body.file_id = filePayload.file_id;
+      body.filename = filePayload.filename;
+      body.mime_type = filePayload.mime_type;
+    }
     const res = await fetch(`${API}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ messages: contextMessages }),
+      body: JSON.stringify(body),
     });
 
     if (res.status === 401) { logout(); return; }
@@ -337,11 +386,14 @@ async function sendMessage() {
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
-function appendUserMsg(text, scroll = true) {
+function appendUserMsg(text, scroll = true, file = null) {
   const msgs = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg user';
-  el.innerHTML = `<div class="avatar user-av">J</div><div class="bubble user-bubble">${esc(text)}</div>`;
+  const fileBadge = file
+    ? `<div class="file-badge">📎 ${esc(file.filename)}</div>`
+    : '';
+  el.innerHTML = `<div class="avatar user-av">J</div><div class="bubble user-bubble">${fileBadge}${esc(text)}</div>`;
   msgs.appendChild(el);
   if (scroll) scrollBottom();
 }

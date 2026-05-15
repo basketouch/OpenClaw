@@ -1,4 +1,6 @@
+import base64
 import json
+import os
 
 import anthropic
 from fastapi import APIRouter, Depends
@@ -18,6 +20,7 @@ Capacidades:
 - Organización de proyectos y tareas de negocio
 - Análisis de información y documentos
 - Acceso al workspace de archivos del servidor
+- Búsqueda de información actualizada en internet
 
 Principios:
 - Responde en el idioma del usuario (español por defecto)
@@ -33,6 +36,31 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
+    file_id: str | None = None
+    filename: str | None = None
+    mime_type: str | None = None
+
+
+def _load_file_block(file_id: str, filename: str, mime_type: str) -> dict | None:
+    uploads_dir = "/data/uploads"
+    for fname in os.listdir(uploads_dir) if os.path.isdir(uploads_dir) else []:
+        if fname.startswith(f"{file_id}_"):
+            path = os.path.join(uploads_dir, fname)
+            with open(path, "rb") as f:
+                data = f.read()
+            b64 = base64.standard_b64encode(data).decode()
+
+            if mime_type.startswith("image/"):
+                return {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}}
+            if mime_type == "application/pdf":
+                return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
+            # text files — include as plain text block
+            try:
+                text_content = data.decode("utf-8", errors="replace")
+                return {"type": "text", "text": f"[Archivo: {filename}]\n\n{text_content}"}
+            except Exception:
+                return None
+    return None
 
 
 @router.post("/chat")
@@ -43,9 +71,21 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
         try:
             client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
             tools = get_tool_definitions()
-            messages = [{"role": m.role, "content": m.content} for m in request.messages]
+            messages = []
 
-            # Agentic loop — continues until no more tool calls
+            for i, m in enumerate(request.messages):
+                # Attach file to last user message
+                if (m.role == "user" and i == len(request.messages) - 1
+                        and request.file_id and request.mime_type):
+                    file_block = _load_file_block(
+                        request.file_id, request.filename or "archivo", request.mime_type
+                    )
+                    if file_block:
+                        content = [file_block, {"type": "text", "text": m.content}]
+                        messages.append({"role": "user", "content": content})
+                        continue
+                messages.append({"role": m.role, "content": m.content})
+
             while True:
                 async with client.messages.stream(
                     model=settings.anthropic_model,
@@ -56,17 +96,14 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
                 ) as stream:
                     async for event in stream:
                         etype = getattr(event, "type", None)
-
                         if etype == "content_block_start":
                             block = getattr(event, "content_block", None)
                             if block and getattr(block, "type", None) == "tool_use":
                                 yield f"data: {json.dumps({'type': 'tool_start', 'name': block.name})}\n\n"
-
                         elif etype == "content_block_delta":
                             delta = getattr(event, "delta", None)
                             if delta and getattr(delta, "type", None) == "text_delta":
                                 yield f"data: {json.dumps({'type': 'text', 'content': delta.text})}\n\n"
-
                     message = await stream.get_final_message()
 
                 stop_reason = message.stop_reason
@@ -79,28 +116,21 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
                     yield f"data: {json.dumps({'type': 'done'})}\n\n"
                     break
 
-                # Execute all tool calls and collect results
                 tool_results = []
                 for block in message.content:
                     if getattr(block, "type", None) != "tool_use":
                         continue
-
                     try:
                         result = await execute_tool(block.name, block.input)
-                        result_str = (
-                            json.dumps(result) if not isinstance(result, str) else result
-                        )
+                        result_str = json.dumps(result) if not isinstance(result, str) else result
                     except Exception as e:
                         result_str = f"Error ejecutando {block.name}: {e}"
-
                     yield f"data: {json.dumps({'type': 'tool_done', 'name': block.name})}\n\n"
-
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result_str,
                     })
-
                 messages.append({"role": "user", "content": tool_results})
 
         except anthropic.APIStatusError as e:
@@ -111,11 +141,7 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection": "keep-alive",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
     )
 
 
