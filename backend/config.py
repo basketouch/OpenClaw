@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     waha_url: str = "http://waha:3000"
     waha_session: str = "default"
+    waha_api_key: Optional[str] = None
     whatsapp_contacts: list[WhatsAppContact] = []
     tts_voice: str = "es-ES-AlvaroNeural"
 

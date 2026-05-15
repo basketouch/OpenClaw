@@ -24,11 +24,14 @@ services:
     image: devlikeapro/waha:latest
     container_name: waha
     restart: unless-stopped
+    env_file: .env
     environment:
       - WHATSAPP_DEFAULT_ENGINE=NOWEB
       - WAHA_PRINT_QR=false
     volumes:
       - waha_data:/app/.sessions
+    ports:
+      - "127.0.0.1:3000:3000"
     networks:
       - default
       - n8n-infra

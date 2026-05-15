@@ -21,6 +21,11 @@ def _session() -> str:
     return get_settings().waha_session
 
 
+def _headers() -> dict:
+    key = get_settings().waha_api_key
+    return {"X-Api-Key": key} if key else {}
+
+
 def _normalize_phone(phone: str) -> str:
     digits = re.sub(r"\D", "", phone)
     return f"{digits}@c.us"
@@ -37,6 +42,7 @@ async def _search_waha_contact(query: str) -> str | None:
             r = await client.get(
                 f"{_waha()}/api/contacts/all",
                 params={"session": _session()},
+                headers=_headers(),
             )
             contacts = r.json()
         if not isinstance(contacts, list):
@@ -123,7 +129,7 @@ async def send_whatsapp_message(to: str, message: str) -> dict:
     payload = {"session": _session(), "chatId": chat_id, "text": message}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{_waha()}/api/sendText", json=payload)
+            r = await client.post(f"{_waha()}/api/sendText", json=payload, headers=_headers())
             r.raise_for_status()
         return {"success": True, "para": to, "chat_id": chat_id}
     except Exception as e:
@@ -170,7 +176,7 @@ async def send_whatsapp_voice(to: str, text: str, voice: str | None = None) -> d
             },
         }
         async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(f"{_waha()}/api/sendVoice", json=payload)
+            r = await client.post(f"{_waha()}/api/sendVoice", json=payload, headers=_headers())
             r.raise_for_status()
         return {"success": True, "para": to, "voice": voice, "characters": len(text)}
     except Exception as e:
@@ -187,7 +193,7 @@ WA_STATUS_DEF = {
 async def whatsapp_status() -> dict:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{_waha()}/api/sessions/{_session()}")
+            r = await client.get(f"{_waha()}/api/sessions/{_session()}", headers=_headers())
             data = r.json()
         status = data.get("status", "UNKNOWN")
         return {
@@ -235,6 +241,7 @@ async def search_whatsapp_contacts(query: str) -> dict:
             r = await client.get(
                 f"{_waha()}/api/contacts/all",
                 params={"session": _session()},
+                headers=_headers(),
             )
             all_contacts = r.json()
         if not isinstance(all_contacts, list):
