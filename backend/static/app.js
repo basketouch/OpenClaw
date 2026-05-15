@@ -4,6 +4,7 @@ let history = [];
 let busy = false;
 let currentChatId = null;
 let pendingFile = null; // { file_id, filename, mime_type, size }
+let pushSub = null;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ async function showApp() {
   document.getElementById('app').classList.remove('hidden');
   await loadChatList();
   document.getElementById('msg-input').focus();
+  initPush();
 }
 
 // ─── Sidebar ─────────────────────────────────────────────────────────────────
@@ -206,6 +208,7 @@ function renderMessages() {
     if (msg.role === 'user') appendUserMsg(msg.content, false);
     else if (msg.role === 'assistant') {
       const bubble = appendAssistantBubble();
+      bubble._rawText = msg.content;
       bubble.innerHTML = renderMd(msg.content);
       bubble.classList.remove('cursor');
     }
@@ -351,6 +354,7 @@ async function sendMessage() {
 
         if (ev.type === 'text') {
           responseText += ev.content;
+          bubble._rawText = responseText;
           bubble.classList.remove('cursor');
           bubble.innerHTML = renderMd(responseText);
           bubble.classList.add('cursor');
@@ -407,10 +411,27 @@ function appendAssistantBubble() {
     <div class="msg-body">
       <div class="bubble alex-bubble cursor"></div>
       <div class="tools"></div>
+      <div class="msg-actions">
+        <button class="copy-btn" onclick="copyBubble(this)" title="Copiar mensaje">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copiar
+        </button>
+      </div>
     </div>`;
   msgs.appendChild(el);
   scrollBottom();
   return el.querySelector('.bubble');
+}
+
+function copyBubble(btn) {
+  const bubble = btn.closest('.msg-body').querySelector('.bubble');
+  const text = bubble._rawText || bubble.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copiado';
+    setTimeout(() => {
+      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar`;
+    }, 1500);
+  });
 }
 
 function addTool(container, name, state) {
@@ -509,6 +530,7 @@ function openAdmin() {
   document.getElementById('admin-panel').classList.remove('hidden');
   requestAnimationFrame(() => document.getElementById('admin-panel').classList.add('open'));
   loadAdminData();
+  updatePushUI();
 }
 
 function closeAdmin() {
@@ -587,6 +609,72 @@ async function deleteTask(id) {
   if (!confirm('¿Eliminar esta tarea?')) return;
   await fetch(`/api/admin/tasks/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
   loadTasks();
+}
+
+// ─── Push notifications ───────────────────────────────────────────────────────
+
+async function initPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    pushSub = await reg.pushManager.getSubscription();
+  } catch { /* ignore */ }
+}
+
+function updatePushUI() {
+  const status = document.getElementById('push-status');
+  const btn = document.getElementById('push-btn');
+  const testWrap = document.getElementById('push-test-wrap');
+  if (!status) return;
+  if (!('PushManager' in window)) {
+    status.textContent = 'No soportado en este navegador';
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  if (pushSub) {
+    status.innerHTML = '<span style="color:var(--green)">● Notificaciones activadas</span>';
+    if (btn) btn.textContent = 'Desactivar notificaciones';
+    if (testWrap) testWrap.style.display = '';
+  } else {
+    status.innerHTML = '<span style="color:var(--muted)">○ Notificaciones desactivadas</span>';
+    if (btn) btn.textContent = 'Activar notificaciones';
+    if (testWrap) testWrap.style.display = 'none';
+  }
+}
+
+function _urlBase64ToUint8Array(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function togglePush() {
+  if (pushSub) {
+    await pushSub.unsubscribe();
+    pushSub = null;
+    updatePushUI();
+    return;
+  }
+  try {
+    const { public_key } = await adminFetch('/api/push/vapid-key');
+    const reg = await navigator.serviceWorker.ready;
+    pushSub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: _urlBase64ToUint8Array(public_key),
+    });
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(pushSub.toJSON()),
+    });
+    updatePushUI();
+  } catch (e) {
+    alert('Error al activar notificaciones: ' + e.message);
+  }
+}
+
+async function testPush() {
+  await fetch('/api/push/test', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
 }
 
 async function doDeploy() {

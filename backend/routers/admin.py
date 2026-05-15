@@ -56,9 +56,9 @@ async def stats(_: str = Depends(verify_token)):
 
 @router.get("/containers")
 async def containers(_: str = Depends(verify_token)):
-    out, err = await _sh("docker ps --format '{{.Names}}\\t{{.Status}}\\t{{.Image}}' 2>&1")
-    if not out and err:
-        return {"containers": [], "error": err[:200]}
+    out, err = await _sh("docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}'")
+    if err:
+        return {"containers": [], "error": err[:300]}
     result = []
     for line in out.splitlines():
         parts = line.split("\t")

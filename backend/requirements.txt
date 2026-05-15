@@ -9,3 +9,4 @@ edge-tts==7.0.2
 httpx==0.28.1
 apscheduler==3.10.4
 duckduckgo-search==6.3.7
+pywebpush==2.0.0

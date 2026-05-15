@@ -58,6 +58,7 @@ async def _run_job(job_id: str, name: str, prompt: str):
 
     client = AsyncAnthropic(api_key=settings.anthropic_api_key)
     messages = [{"role": "user", "content": prompt}]
+    final_text = ""
 
     for _ in range(10):
         resp = await client.messages.create(
@@ -69,6 +70,10 @@ async def _run_job(job_id: str, name: str, prompt: str):
         )
 
         if resp.stop_reason == "end_turn":
+            final_text = next(
+                (b.text[:140] for b in resp.content if hasattr(b, "text") and b.text),
+                "Tarea ejecutada.",
+            )
             break
 
         if resp.stop_reason == "tool_use":
@@ -87,6 +92,11 @@ async def _run_job(job_id: str, name: str, prompt: str):
             break
 
     log.info("Scheduler: tarea '%s' completada", name)
+    try:
+        import push
+        await asyncio.to_thread(push.send_notification, f"✓ {name}", final_text)
+    except Exception as e:
+        log.warning("Push notification failed: %s", e)
 
 
 def _reload_jobs():

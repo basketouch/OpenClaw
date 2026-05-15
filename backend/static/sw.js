@@ -1,4 +1,4 @@
-const CACHE = 'alex-v8';
+const CACHE = 'alex-v9';
 const SHELL = ['/', '/style.css', '/app.js', '/manifest.json'];
 
 self.addEventListener('install', e => {
@@ -23,4 +23,21 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );
+});
+
+self.addEventListener('push', e => {
+  let data = { title: 'Alex', body: '' };
+  try { data = e.data.json(); } catch {}
+  e.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icon.png',
+      badge: '/icon.png',
+    })
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(clients.openWindow('/'));
 });
