@@ -1,5 +1,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Elimina flash de tap en iOS y retraso de 300ms */
+* { -webkit-tap-highlight-color: transparent; }
+button, a, [role="button"] { touch-action: manipulation; user-select: none; }
+
 :root {
   --bg:        #111113;
   --surface:   #1a1a1f;
@@ -19,13 +23,16 @@
   --mono:      'Fira Code', 'Cascadia Code', 'Consolas', monospace;
 }
 
-html, body { height: 100%; font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; }
+html, body {
+  height: 100%; height: 100dvh; /* dvh se ajusta cuando aparece el teclado en iPhone */
+  font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden;
+}
 
 .hidden { display: none !important; }
 
 /* ── Auth ── */
 #auth-screen {
-  height: 100vh; display: flex; align-items: center; justify-content: center;
+  height: 100dvh; display: flex; align-items: center; justify-content: center;
 }
 
 .auth-card {
@@ -71,7 +78,7 @@ html, body { height: 100%; font-family: var(--font); background: var(--bg); colo
 .auth-err { color: var(--err); font-size: 13px; margin-top: 12px; min-height: 18px; }
 
 /* ── App layout ── */
-#app { height: 100vh; display: flex; flex-direction: column; }
+#app { height: 100dvh; display: flex; flex-direction: column; }
 
 /* ── Header ── */
 header {
@@ -237,9 +244,106 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
 #send-btn:hover:not(:disabled) { background: var(--accent-h); }
 #send-btn:disabled { opacity: .4; cursor: not-allowed; }
 
-/* ── Mobile ── */
+/* ── Mobile / iPhone ── */
 @media (max-width: 600px) {
-  .auth-card { width: calc(100% - 32px); padding: 36px 24px; }
-  #chat { padding: 14px; }
-  footer { padding: 10px 14px; }
+
+  /* Auth */
+  .auth-card {
+    width: calc(100% - 32px);
+    padding: 36px 20px;
+    border-radius: 16px;
+  }
+  .alex-name { font-size: 32px; }
+
+  /* 16px mínimo en inputs para evitar zoom automático en iPhone */
+  #username-input, #password-input {
+    font-size: 16px;
+    padding: 14px;
+  }
+  #login-btn {
+    font-size: 16px;
+    padding: 14px;
+    min-height: 50px;
+  }
+
+  /* Header */
+  header {
+    padding: 10px 14px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+  }
+  .hdr-sub { display: none; }
+  .hdr-icon { font-size: 18px; }
+  .hdr-title { font-size: 14px; }
+
+  /* Botones de cabecera: mínimo 44×44px (HIG de Apple) */
+  .btn-icon {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    font-size: 17px;
+    border-radius: 10px;
+  }
+
+  /* Chat */
+  #chat { padding: 10px 12px; }
+  #messages { gap: 10px; }
+
+  /* Welcome */
+  .welcome { padding: 28px 8px 16px; }
+  .welcome-icon { font-size: 32px; margin-bottom: 10px; }
+  .welcome h2 { font-size: 22px; }
+  .welcome p { font-size: 14px; margin-bottom: 20px; }
+
+  /* Chips: scroll horizontal en móvil */
+  .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex-shrink: 0; font-size: 13px; }
+
+  /* Mensajes */
+  .avatar { width: 26px; height: 26px; font-size: 11px; border-radius: 7px; }
+  .msg { gap: 8px; }
+  .msg-body { max-width: calc(100% - 34px); }
+
+  .bubble {
+    font-size: 15px;
+    padding: 9px 12px;
+    line-height: 1.6;
+  }
+
+  .alex-bubble pre { padding: 10px; }
+  .alex-bubble pre code { font-size: 12px; }
+
+  /* Footer */
+  footer {
+    padding: 8px 10px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .input-wrap {
+    padding: 5px 5px 5px 14px;
+    border-radius: 22px;
+    gap: 8px;
+  }
+
+  textarea {
+    font-size: 16px; /* evita zoom en iPhone */
+    padding: 5px 0;
+  }
+
+  /* Send: mínimo 44×44px */
+  #send-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
 }
