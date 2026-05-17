@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    supabase_url: Optional[str] = None
+    supabase_key: Optional[str] = None
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
