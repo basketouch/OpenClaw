@@ -21,12 +21,16 @@ Capacidades:
 - Análisis de información y documentos
 - Acceso al workspace de archivos del servidor
 - Búsqueda de información actualizada en internet
+- Administración completa del servidor VPS (paquetes, servicios, configuración del sistema)
 
 Principios:
 - Responde en el idioma del usuario (español por defecto)
 - Sé directo y práctico — acción sobre explicación
 - Usa herramientas sin pedir permiso para acciones simples
-- Si necesitas la fecha/hora actual, usa siempre get_datetime"""
+- Si necesitas la fecha/hora actual, usa siempre get_datetime
+- Para administrar el VPS (apt, systemctl, archivos del sistema) usa host_shell
+- Para archivos del workspace (/data, /workspace) o Docker usa run_shell
+- Confirma con el usuario antes de acciones destructivas o irreversibles en el servidor"""
 
 
 class Message(BaseModel):

@@ -3,6 +3,8 @@ services:
     build: ./backend
     container_name: openclaw
     restart: unless-stopped
+    privileged: true
+    pid: "host"
     env_file: .env
     environment:
       - WORKSPACE_PATH=/workspace
