@@ -12,7 +12,7 @@ async function tryToken(t) {
   try {
     const r = await fetch(`${API}/api/health`, { headers: { Authorization: `Bearer ${t}` } });
     return r.ok;
-  } catch { return false; }
+  } catch (_) { return false; }
 }
 
 async function login() {
@@ -36,7 +36,7 @@ async function login() {
       document.getElementById('login-btn').disabled = false;
       document.getElementById('password-input').focus();
     }
-  } catch {
+  } catch (_) {
     setAuthErr('Error de conexión con el servidor.');
     document.getElementById('login-btn').disabled = false;
   }
@@ -98,7 +98,7 @@ async function loadChatList() {
     } else {
       await startNewChat();
     }
-  } catch {
+  } catch (_) {
     await startNewChat();
   }
 }
@@ -148,7 +148,7 @@ async function startNewChat() {
     document.getElementById('chat-title-hdr').textContent = 'OpenClaw';
     closeSidebar();
     document.getElementById('msg-input').focus();
-  } catch {
+  } catch (_) {
     history = [];
     showWelcome();
   }
@@ -167,7 +167,7 @@ async function loadChat(id) {
     closeSidebar();
     scrollBottom();
     document.getElementById('msg-input').focus();
-  } catch { /* ignore */ }
+  } catch (_) { /* ignore */ }
 }
 
 async function deleteChat(e, id) {
@@ -193,11 +193,10 @@ async function saveCurrentChat() {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: history }),
     });
-    // refresh list metadata
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     chatList = (await r.json()).chats || [];
     renderChatList();
-  } catch { /* ignore */ }
+  } catch (_) { /* ignore */ }
 }
 
 function renderMessages() {
@@ -249,7 +248,7 @@ function resize(el) {
 }
 
 function onKey(e) {
-  // Enter just inserts a newline; use the send button to send
+  // Enter inserts newline; use the send button to send
 }
 
 // ─── File upload ─────────────────────────────────────────────────────────────
@@ -258,7 +257,7 @@ async function pickFile() {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*,.pdf,.txt,.md,.csv';
-  input.onchange = async () => {
+  input.onchange = async function() {
     const file = input.files[0];
     if (!file) return;
     const preview = document.getElementById('attach-preview');
@@ -272,7 +271,7 @@ async function pickFile() {
         headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
       pendingFile = await r.json();
       preview.innerHTML = `<span class="attach-name">📎 ${esc(pendingFile.filename)}</span><button class="attach-del" onclick="clearAttachment()">✕</button>`;
     } catch (e) {
@@ -298,15 +297,16 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text && !pendingFile) return;
 
-  const msgText = text || `[Archivo: ${pendingFile?.filename}]`;
+  const msgText = text || ('[Archivo: ' + (pendingFile ? pendingFile.filename : '') + ']');
   input.value = '';
   resize(input);
-  document.querySelector('.welcome')?.remove();
+  var welcome = document.querySelector('.welcome');
+  if (welcome) welcome.remove();
 
   history.push({ role: 'user', content: msgText });
   appendUserMsg(msgText, true, pendingFile);
 
-  const filePayload = pendingFile ? { ...pendingFile } : null;
+  const filePayload = pendingFile ? Object.assign({}, pendingFile) : null;
   clearAttachment();
 
   busy = true;
@@ -324,33 +324,33 @@ async function sendMessage() {
       body.filename = filePayload.filename;
       body.mime_type = filePayload.mime_type;
     }
-    const res = await fetch(`${API}/api/chat`, {
+    const res = await fetch(API + '/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
       body: JSON.stringify(body),
     });
 
     if (res.status === 401) { logout(); return; }
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
 
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
 
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, { stream: true });
       const parts = buf.split('\n\n');
       buf = parts.pop();
 
-      for (const part of parts) {
-        const line = part.trim();
+      for (let i = 0; i < parts.length; i++) {
+        const line = parts[i].trim();
         if (!line.startsWith('data: ')) continue;
         const raw = line.slice(6).trim();
         if (!raw) continue;
         let ev;
-        try { ev = JSON.parse(raw); } catch { continue; }
+        try { ev = JSON.parse(raw); } catch (_) { continue; }
 
         if (ev.type === 'text') {
           responseText += ev.content;
@@ -367,7 +367,7 @@ async function sendMessage() {
           bubble.classList.remove('cursor');
         } else if (ev.type === 'error') {
           bubble.classList.remove('cursor');
-          bubble.innerHTML = `<span class="err">Error: ${esc(ev.message)}</span>`;
+          bubble.innerHTML = '<span class="err">Error: ' + esc(ev.message) + '</span>';
         }
       }
     }
@@ -380,7 +380,7 @@ async function sendMessage() {
 
   } catch (err) {
     bubble.classList.remove('cursor');
-    bubble.innerHTML = `<span class="err">${esc(err.message)}</span>`;
+    bubble.innerHTML = '<span class="err">' + esc(err.message) + '</span>';
   } finally {
     busy = false;
     setDisabled(false);
@@ -390,14 +390,14 @@ async function sendMessage() {
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
-function appendUserMsg(text, scroll = true, file = null) {
+function appendUserMsg(text, scroll, file) {
+  if (scroll === undefined) scroll = true;
+  if (file === undefined) file = null;
   const msgs = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg user';
-  const fileBadge = file
-    ? `<div class="file-badge">📎 ${esc(file.filename)}</div>`
-    : '';
-  el.innerHTML = `<div class="avatar user-av">J</div><div class="bubble user-bubble">${fileBadge}${esc(text)}</div>`;
+  const fileBadge = file ? '<div class="file-badge">📎 ' + esc(file.filename) + '</div>' : '';
+  el.innerHTML = '<div class="avatar user-av">J</div><div class="bubble user-bubble">' + fileBadge + esc(text) + '</div>';
   msgs.appendChild(el);
   if (scroll) scrollBottom();
 }
@@ -406,18 +406,18 @@ function appendAssistantBubble() {
   const msgs = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg assistant';
-  el.innerHTML = `
-    <div class="avatar alex-av">⚡</div>
-    <div class="msg-body">
-      <div class="bubble alex-bubble cursor"></div>
-      <div class="tools"></div>
-      <div class="msg-actions">
-        <button class="copy-btn" onclick="copyBubble(this)" title="Copiar mensaje">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-          Copiar
-        </button>
-      </div>
-    </div>`;
+  el.innerHTML =
+    '<div class="avatar alex-av">⚡</div>' +
+    '<div class="msg-body">' +
+      '<div class="bubble alex-bubble cursor"></div>' +
+      '<div class="tools"></div>' +
+      '<div class="msg-actions">' +
+        '<button class="copy-btn" onclick="copyBubble(this)" title="Copiar mensaje">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
+          ' Copiar' +
+        '</button>' +
+      '</div>' +
+    '</div>';
   msgs.appendChild(el);
   scrollBottom();
   return el.querySelector('.bubble');
@@ -426,26 +426,28 @@ function appendAssistantBubble() {
 function copyBubble(btn) {
   const bubble = btn.closest('.msg-body').querySelector('.bubble');
   const text = bubble._rawText || bubble.innerText;
-  navigator.clipboard.writeText(text).then(() => {
+  navigator.clipboard.writeText(text).then(function() {
     btn.textContent = '✓ Copiado';
-    setTimeout(() => {
-      btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar`;
+    setTimeout(function() {
+      btn.innerHTML =
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copiar';
     }, 1500);
   });
 }
 
 function addTool(container, name, state) {
   const el = document.createElement('div');
-  el.className = `tool ${state}`;
+  el.className = 'tool ' + state;
   el.dataset.tool = name;
-  el.innerHTML = `<span class="tool-icon">${state === 'running' ? '⚙' : '✓'}</span> ${esc(name)}`;
+  el.innerHTML = '<span class="tool-icon">' + (state === 'running' ? '⚙' : '✓') + '</span> ' + esc(name);
   container.appendChild(el);
   scrollBottom();
 }
 
 function doneTool(container, name) {
-  const el = container?.querySelector(`[data-tool="${name}"]`);
-  if (el) { el.className = 'tool done'; el.innerHTML = `<span class="tool-icon">✓</span> ${esc(name)}`; }
+  if (!container) return;
+  const el = container.querySelector('[data-tool="' + name + '"]');
+  if (el) { el.className = 'tool done'; el.innerHTML = '<span class="tool-icon">✓</span> ' + esc(name); }
 }
 
 function setDisabled(v) { document.getElementById('send-btn').disabled = v; }
@@ -454,7 +456,7 @@ function setStatus(state) {
   document.getElementById('status-dot').className = state === 'loading' ? 'dot loading' : 'dot';
 }
 
-function scrollBottom() { const c = document.getElementById('chat'); c.scrollTop = c.scrollHeight; }
+function scrollBottom() { var c = document.getElementById('chat'); c.scrollTop = c.scrollHeight; }
 
 function esc(t) {
   return String(t)
@@ -463,10 +465,10 @@ function esc(t) {
 
 function renderMd(text) {
   const parts = text.split(/(```[\w]*\n[\s\S]*?```)/g);
-  return parts.map((part, i) => {
+  return parts.map(function(part, i) {
     if (i % 2 === 1) {
       const code = part.replace(/^```[\w]*\n/, '').replace(/\n?```$/, '');
-      return `<pre><code>${esc(code)}</code></pre>`;
+      return '<pre><code>' + esc(code) + '</code></pre>';
     }
     let h = esc(part);
     h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
@@ -479,17 +481,17 @@ function renderMd(text) {
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
-document.getElementById('username-input')?.addEventListener('keydown', e => {
+document.getElementById('username-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') document.getElementById('password-input').focus();
 });
-document.getElementById('password-input')?.addEventListener('keydown', e => {
+document.getElementById('password-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') login();
 });
 
 init();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.register('/sw.js').catch(function() {});
 }
 
 // ─── WhatsApp (dentro del panel admin) ───────────────────────────────────────
@@ -500,26 +502,26 @@ async function loadWA() {
   statusBar.innerHTML = '<div class="wa-status mid">Comprobando conexión…</div>';
   qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px">Cargando QR…</p>';
   try {
-    const r = await fetch('/api/whatsapp/status', { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch('/api/whatsapp/status', { headers: { Authorization: 'Bearer ' + token } });
     const data = await r.json();
     const connected = data.conectado || data.status === 'WORKING';
     const estado = data.estado || data.status || 'UNKNOWN';
     if (connected) {
-      statusBar.innerHTML = `<div class="wa-status ok">● Conectado — ${esc(estado)}</div>`;
+      statusBar.innerHTML = '<div class="wa-status ok">● Conectado — ' + esc(estado) + '</div>';
       qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
       return;
     }
-    statusBar.innerHTML = `<div class="wa-status err">● Desconectado — ${esc(estado)}</div>`;
-  } catch {
+    statusBar.innerHTML = '<div class="wa-status err">● Desconectado — ' + esc(estado) + '</div>';
+  } catch (_) {
     statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
   }
   try {
-    const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: 'Bearer ' + token } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
-    qrArea.innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="QR WhatsApp">`;
+    qrArea.innerHTML = '<img src="' + URL.createObjectURL(blob) + '" alt="QR WhatsApp">';
   } catch (e) {
-    qrArea.innerHTML = `<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ${esc(e.message)}</p>`;
+    qrArea.innerHTML = '<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ' + esc(e.message) + '</p>';
   }
 }
 
@@ -528,7 +530,7 @@ async function loadWA() {
 function openAdmin() {
   document.getElementById('admin-overlay').classList.remove('hidden');
   document.getElementById('admin-panel').classList.remove('hidden');
-  requestAnimationFrame(() => document.getElementById('admin-panel').classList.add('open'));
+  requestAnimationFrame(function() { document.getElementById('admin-panel').classList.add('open'); });
   loadAdminData();
   updatePushUI();
 }
@@ -536,14 +538,14 @@ function openAdmin() {
 function closeAdmin() {
   const panel = document.getElementById('admin-panel');
   panel.classList.remove('open');
-  setTimeout(() => {
+  setTimeout(function() {
     panel.classList.add('hidden');
     document.getElementById('admin-overlay').classList.add('hidden');
   }, 250);
 }
 
 async function adminFetch(path) {
-  const r = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  const r = await fetch(path, { headers: { Authorization: 'Bearer ' + token } });
   return r.json();
 }
 
@@ -556,21 +558,22 @@ async function loadStats() {
     document.getElementById('s-mem').textContent = d.memory || '—';
     document.getElementById('s-load').textContent = d.load || '—';
     document.getElementById('s-uptime').textContent = d.uptime || '—';
-  } catch { document.getElementById('s-disk').textContent = 'error'; }
+  } catch (_) { document.getElementById('s-disk').textContent = 'error'; }
 }
 
 async function loadContainers() {
   const el = document.getElementById('admin-containers');
   try {
     const d = await adminFetch('/api/admin/containers');
-    if (d.error) { el.innerHTML = `<p class="no-items" style="color:var(--err)">${esc(d.error)}</p>`; return; }
+    if (d.error) { el.innerHTML = '<p class="no-items" style="color:var(--err)">' + esc(d.error) + '</p>'; return; }
     if (!d.containers.length) { el.innerHTML = '<p class="no-items">Sin contenedores</p>'; return; }
-    el.innerHTML = d.containers.map(c => `
-      <div class="container-row">
-        <span class="container-name">${esc(c.name)}</span>
-        <span class="container-status ${c.up ? 'status-up' : 'status-down'}">${c.up ? '● Activo' : '● Parado'}</span>
-      </div>`).join('');
-  } catch { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
+    el.innerHTML = d.containers.map(function(c) {
+      return '<div class="container-row">' +
+        '<span class="container-name">' + esc(c.name) + '</span>' +
+        '<span class="container-status ' + (c.up ? 'status-up' : 'status-down') + '">' + (c.up ? '● Activo' : '● Parado') + '</span>' +
+        '</div>';
+    }).join('');
+  } catch (_) { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
 }
 
 async function loadTasks() {
@@ -578,36 +581,36 @@ async function loadTasks() {
   try {
     const d = await adminFetch('/api/admin/tasks');
     if (!d.tasks.length) { el.innerHTML = '<p class="no-items">No hay tareas programadas</p>'; return; }
-    el.innerHTML = d.tasks.map(t => {
+    el.innerHTML = d.tasks.map(function(t) {
       const sched = t.schedule_type === 'cron'
         ? 'Cron: ' + JSON.stringify(t.schedule_params)
         : 'Cada: ' + JSON.stringify(t.schedule_params);
-      return `<div class="task-row">
-        <div class="task-info">
-          <div class="task-name">${esc(t.name)}</div>
-          <div class="task-schedule">${esc(sched)}</div>
-        </div>
-        <div class="task-actions">
-          <button class="task-btn" onclick="toggleTask('${t.id}',${!t.enabled})">${t.enabled ? 'Pausar' : 'Activar'}</button>
-          <button class="task-btn danger" onclick="deleteTask('${t.id}')">✕</button>
-        </div>
-      </div>`;
+      return '<div class="task-row">' +
+        '<div class="task-info">' +
+          '<div class="task-name">' + esc(t.name) + '</div>' +
+          '<div class="task-schedule">' + esc(sched) + '</div>' +
+        '</div>' +
+        '<div class="task-actions">' +
+          '<button class="task-btn" onclick="toggleTask(\'' + t.id + '\',' + (!t.enabled) + ')">' + (t.enabled ? 'Pausar' : 'Activar') + '</button>' +
+          '<button class="task-btn danger" onclick="deleteTask(\'' + t.id + '\')">✕</button>' +
+        '</div>' +
+        '</div>';
     }).join('');
-  } catch { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
+  } catch (_) { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
 }
 
 async function toggleTask(id, enabled) {
-  await fetch(`/api/admin/tasks/${id}`, {
+  await fetch('/api/admin/tasks/' + id, {
     method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: enabled }),
   });
   loadTasks();
 }
 
 async function deleteTask(id) {
   if (!confirm('¿Eliminar esta tarea?')) return;
-  await fetch(`/api/admin/tasks/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  await fetch('/api/admin/tasks/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
   loadTasks();
 }
 
@@ -618,7 +621,7 @@ async function initPush() {
   try {
     const reg = await navigator.serviceWorker.ready;
     pushSub = await reg.pushManager.getSubscription();
-  } catch { /* ignore */ }
+  } catch (_) { /* ignore */ }
 }
 
 function updatePushUI() {
@@ -645,7 +648,9 @@ function updatePushUI() {
 function _urlBase64ToUint8Array(b64) {
   const pad = '='.repeat((4 - b64.length % 4) % 4);
   const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
-  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
 }
 
 async function togglePush() {
@@ -656,15 +661,15 @@ async function togglePush() {
     return;
   }
   try {
-    const { public_key } = await adminFetch('/api/push/vapid-key');
+    const data = await adminFetch('/api/push/vapid-key');
     const reg = await navigator.serviceWorker.ready;
     pushSub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: _urlBase64ToUint8Array(public_key),
+      applicationServerKey: _urlBase64ToUint8Array(data.public_key),
     });
     await fetch('/api/push/subscribe', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(pushSub.toJSON()),
     });
     updatePushUI();
@@ -674,7 +679,7 @@ async function togglePush() {
 }
 
 async function testPush() {
-  await fetch('/api/push/test', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  await fetch('/api/push/test', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
 }
 
 async function doDeploy() {
@@ -684,11 +689,11 @@ async function doDeploy() {
   btn.textContent = 'Iniciando…';
   try {
     const d = await fetch('/api/admin/deploy', {
-      method: 'POST', headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.json());
+      method: 'POST', headers: { Authorization: 'Bearer ' + token },
+    }).then(function(r) { return r.json(); });
     msg.textContent = d.message;
     btn.textContent = '✓ Deploy iniciado';
-  } catch {
+  } catch (_) {
     btn.disabled = false;
     btn.textContent = '↑ Actualizar a la última versión';
     msg.textContent = 'Error al iniciar deploy';
