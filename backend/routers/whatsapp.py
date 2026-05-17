@@ -26,6 +26,31 @@ async def status(_: str = Depends(verify_token)):
         return {"error": str(e), "status": "OFFLINE"}
 
 
+@router.post("/start")
+async def start_session(_: str = Depends(verify_token)):
+    """Arranca la sesión de WhatsApp para poder escanear el QR."""
+    settings = get_settings()
+    headers = _waha_headers(settings)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # Try starting an existing session first
+            r = await client.post(
+                f"{settings.waha_url}/api/sessions/{settings.waha_session}/start",
+                headers=headers,
+            )
+            if r.status_code in (200, 201):
+                return {"ok": True, "status": r.json()}
+            # If session doesn't exist, create it
+            r2 = await client.post(
+                f"{settings.waha_url}/api/sessions",
+                headers=headers,
+                json={"name": settings.waha_session},
+            )
+            return {"ok": r2.status_code in (200, 201), "status": r2.json()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @router.get("/qr")
 async def qr_code(_: str = Depends(verify_token)):
     """Devuelve el QR como imagen PNG para escanear con el móvil."""

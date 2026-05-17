@@ -500,12 +500,14 @@ async function loadWA() {
   const statusBar = document.getElementById('wa-status-bar');
   const qrArea = document.getElementById('wa-qr-area');
   statusBar.innerHTML = '<div class="wa-status mid">Comprobando conexión…</div>';
-  qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px">Cargando QR…</p>';
+  qrArea.innerHTML = '';
+
+  var estado = 'UNKNOWN';
   try {
     const r = await fetch('/api/whatsapp/status', { headers: { Authorization: 'Bearer ' + token } });
     const data = await r.json();
     const connected = data.conectado || data.status === 'WORKING';
-    const estado = data.estado || data.status || 'UNKNOWN';
+    estado = data.estado || data.status || 'UNKNOWN';
     if (connected) {
       statusBar.innerHTML = '<div class="wa-status ok">● Conectado — ' + esc(estado) + '</div>';
       qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
@@ -515,11 +517,24 @@ async function loadWA() {
   } catch (_) {
     statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
   }
+
+  // Si la sesión está parada o sin iniciar, arrancarla automáticamente
+  if (estado === 'STOPPED' || estado === 'UNKNOWN' || estado === 'FAILED') {
+    qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Iniciando sesión…</p>';
+    try {
+      await fetch('/api/whatsapp/start', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    } catch (_) {}
+    // Esperar a que WAHA arranque y genere el QR
+    await new Promise(function(res) { setTimeout(res, 4000); });
+  }
+
+  // Cargar QR
+  qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Cargando QR…</p>';
   try {
     const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
-    qrArea.innerHTML = '<img src="' + URL.createObjectURL(blob) + '" alt="QR WhatsApp">';
+    qrArea.innerHTML = '<img src="' + URL.createObjectURL(blob) + '" alt="QR WhatsApp" style="border-radius:12px;max-width:220px;width:100%">';
   } catch (e) {
     qrArea.innerHTML = '<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ' + esc(e.message) + '</p>';
   }
