@@ -499,26 +499,15 @@ if ('serviceWorker' in navigator) {
 async function loadWA() {
   const statusBar = document.getElementById('wa-status-bar');
   const qrArea = document.getElementById('wa-qr-area');
-  const dbg = document.getElementById('wa-debug');
-  var log = [];
-
-  function waLog(msg) {
-    log.push(msg);
-    dbg.style.display = '';
-    dbg.textContent = log.join('\n');
-  }
 
   statusBar.innerHTML = '<div class="wa-status mid">Comprobando conexión…</div>';
   qrArea.innerHTML = '';
 
   var estado = 'UNKNOWN';
   try {
-    waLog('[1] GET /api/whatsapp/status');
     const r = await fetch('/api/whatsapp/status', { headers: { Authorization: 'Bearer ' + token } });
-    const text = await r.text();
-    waLog('    HTTP ' + r.status + ' → ' + text);
     var data = {};
-    try { data = JSON.parse(text); } catch (_) {}
+    try { data = await r.json(); } catch (_) {}
     const connected = data.conectado || data.status === 'WORKING';
     estado = data.estado || data.status || 'UNKNOWN';
     statusBar.innerHTML = connected
@@ -528,41 +517,25 @@ async function loadWA() {
       qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
       return;
     }
-  } catch (e) {
-    waLog('    ERROR: ' + e.message);
+  } catch (_) {
     statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
   }
 
   if (estado === 'STOPPED' || estado === 'UNKNOWN' || estado === 'FAILED') {
-    waLog('[2] POST /api/whatsapp/start');
     qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Iniciando sesión…</p>';
     try {
-      const r = await fetch('/api/whatsapp/start', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-      const data = await r.json();
-      if (data.log) data.log.forEach(function(l) { waLog('    ' + l); });
-      else waLog('    HTTP ' + r.status + ' → ' + JSON.stringify(data));
-    } catch (e) {
-      waLog('    ERROR: ' + e.message);
-    }
-    waLog('[3] Esperando 6s a que WAHA genere el QR…');
+      await fetch('/api/whatsapp/start', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+    } catch (_) {}
     await new Promise(function(res) { setTimeout(res, 6000); });
   }
 
-  waLog('[4] GET /api/whatsapp/qr');
   qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Cargando QR…</p>';
   try {
     const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: 'Bearer ' + token } });
-    waLog('    HTTP ' + r.status + ' content-type: ' + r.headers.get('content-type'));
-    if (!r.ok) {
-      const txt = await r.text();
-      waLog('    Body: ' + txt);
-      throw new Error('HTTP ' + r.status);
-    }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
-    waLog('    OK — blob size: ' + blob.size + ' bytes');
     qrArea.innerHTML = '<img src="' + URL.createObjectURL(blob) + '" alt="QR WhatsApp" style="border-radius:12px;max-width:220px;width:100%">';
   } catch (e) {
-    waLog('    ERROR: ' + e.message);
     qrArea.innerHTML = '<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ' + esc(e.message) + '</p>';
   }
 }
