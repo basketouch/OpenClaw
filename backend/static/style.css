@@ -462,7 +462,15 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
 .admin-section-title {
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 1px; color: var(--muted); margin-bottom: 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; user-select: none;
 }
+.admin-section-title::after {
+  content: '▾'; font-size: 14px; transition: transform .2s; line-height: 1;
+}
+.admin-section.collapsed .admin-section-title { margin-bottom: 0; }
+.admin-section.collapsed .admin-section-title::after { transform: rotate(-90deg); }
+.admin-section.collapsed > *:not(.admin-section-title) { display: none !important; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .stat-item {
   background: var(--surface); border-radius: 10px; padding: 10px 12px;

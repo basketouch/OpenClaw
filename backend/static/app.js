@@ -540,6 +540,10 @@ async function loadWA() {
   }
 }
 
+function toggleSection(title) {
+  title.closest('.admin-section').classList.toggle('collapsed');
+}
+
 // ─── Admin panel ─────────────────────────────────────────────────────────────
 
 function openAdmin() {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Alex — OpenClaw</title>
-  <link rel="stylesheet" href="/style.css?v=17">
+  <link rel="stylesheet" href="/style.css?v=18">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icon.png" type="image/png">
@@ -113,7 +113,7 @@
   </div>
   <div class="admin-body">
     <div class="admin-section">
-      <div class="admin-section-title">Sistema</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Sistema</div>
       <div class="stat-grid">
         <div class="stat-item"><span class="stat-label">Disco</span><span id="s-disk" class="stat-val">…</span></div>
         <div class="stat-item"><span class="stat-label">RAM</span><span id="s-mem" class="stat-val">…</span></div>
@@ -122,15 +122,15 @@
       </div>
     </div>
     <div class="admin-section">
-      <div class="admin-section-title">Contenedores</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Contenedores</div>
       <div id="admin-containers">…</div>
     </div>
     <div class="admin-section">
-      <div class="admin-section-title">Tareas programadas</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Tareas programadas</div>
       <div id="admin-tasks">…</div>
     </div>
     <div class="admin-section">
-      <div class="admin-section-title">WhatsApp</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">WhatsApp</div>
       <div id="wa-status-bar"></div>
       <div id="wa-qr-area" style="text-align:center;padding:8px 0"></div>
       <p style="font-size:11px;color:var(--muted);text-align:center;margin:4px 0 8px">
@@ -140,7 +140,7 @@
     </div>
 
     <div class="admin-section">
-      <div class="admin-section-title">Telegram</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Telegram</div>
       <div id="tg-status" style="font-size:13px;margin-bottom:10px;color:var(--muted)">…</div>
       <button class="admin-btn" onclick="detectTelegramChat()">Detectar Chat ID</button>
       <div id="tg-test-wrap" style="display:none;margin-top:8px">
@@ -149,7 +149,7 @@
     </div>
 
     <div class="admin-section">
-      <div class="admin-section-title">Notificaciones Push</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Notificaciones Push</div>
       <div id="push-status" style="font-size:13px;margin-bottom:10px;color:var(--muted)">…</div>
       <button class="admin-btn" id="push-btn" onclick="togglePush()">Activar notificaciones</button>
       <div id="push-test-wrap" style="display:none;margin-top:8px">
@@ -160,6 +160,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=17"></script>
+<script src="/app.js?v=18"></script>
 </body>
 </html>
