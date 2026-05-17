@@ -29,6 +29,14 @@ def _make_png(width: int, height: int, r: int, g: int, b: int) -> bytes:
     )
 
 
+def _make_ico(r: int, g: int, b: int) -> bytes:
+    """Generate a 32x32 ICO file with an embedded PNG."""
+    png = _make_png(32, 32, r, g, b)
+    header = struct.pack("<HHH", 0, 1, 1)
+    entry = struct.pack("<BBBBHHII", 32, 32, 0, 0, 1, 32, len(png), 6 + 16)
+    return header + entry + png
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     static_dir = os.path.join(os.path.dirname(__file__), "static")
@@ -37,6 +45,10 @@ async def lifespan(app: FastAPI):
         png = _make_png(180, 180, 124, 58, 237)  # #7c3aed purple
         with open(icon_path, "wb") as f:
             f.write(png)
+    favicon_path = os.path.join(static_dir, "favicon.ico")
+    if not os.path.exists(favicon_path):
+        with open(favicon_path, "wb") as f:
+            f.write(_make_ico(124, 58, 237))
     sched.start()
     yield
     sched.stop()
