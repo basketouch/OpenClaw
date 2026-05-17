@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     auth_password: str = "change-me-please"
 
     anthropic_api_key: Optional[str] = None
-    anthropic_model: str = "claude-sonnet-4-6"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
 
     workspace_path: str = "/opt/openclaw/workspace"
     debug: bool = False

@@ -337,7 +337,7 @@ async function sendMessage() {
   let responseText = '';
 
   try {
-    const contextMessages = history.slice(-20);
+    const contextMessages = history.slice(-5);
     const body = { messages: contextMessages };
     if (filePayload) {
       body.file_id = filePayload.file_id;
