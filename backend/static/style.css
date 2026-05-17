@@ -466,7 +466,8 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
   cursor: pointer; user-select: none;
 }
 .admin-section-title::after {
-  content: '▾'; font-size: 14px; transition: transform .2s; line-height: 1;
+  content: '▾'; font-size: 18px; transition: transform .2s; line-height: 1;
+  color: var(--text); opacity: .6; flex-shrink: 0;
 }
 .admin-section.collapsed .admin-section-title { margin-bottom: 0; }
 .admin-section.collapsed .admin-section-title::after { transform: rotate(-90deg); }
