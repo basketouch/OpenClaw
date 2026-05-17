@@ -97,6 +97,11 @@ async def _run_job(job_id: str, name: str, prompt: str):
         await asyncio.to_thread(push.send_notification, f"✓ {name}", final_text)
     except Exception as e:
         log.warning("Push notification failed: %s", e)
+    try:
+        from tools.telegram_tool import send_telegram
+        await send_telegram(f"<b>✓ {name}</b>\n{final_text}")
+    except Exception as e:
+        log.warning("Telegram notification failed: %s", e)
 
 
 def _reload_jobs():

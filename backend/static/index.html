@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Alex — OpenClaw</title>
-  <link rel="stylesheet" href="/style.css?v=14">
+  <link rel="stylesheet" href="/style.css?v=15">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icon.png">
   <meta name="theme-color" content="#111113">
@@ -139,6 +139,15 @@
     </div>
 
     <div class="admin-section">
+      <div class="admin-section-title">Telegram</div>
+      <div id="tg-status" style="font-size:13px;margin-bottom:10px;color:var(--muted)">…</div>
+      <button class="admin-btn" onclick="detectTelegramChat()">Detectar Chat ID</button>
+      <div id="tg-test-wrap" style="display:none;margin-top:8px">
+        <button class="admin-btn" onclick="testTelegram()">Enviar mensaje de prueba</button>
+      </div>
+    </div>
+
+    <div class="admin-section">
       <div class="admin-section-title">Notificaciones Push</div>
       <div id="push-status" style="font-size:13px;margin-bottom:10px;color:var(--muted)">…</div>
       <button class="admin-btn" id="push-btn" onclick="togglePush()">Activar notificaciones</button>
@@ -155,6 +164,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=14"></script>
+<script src="/app.js?v=15"></script>
 </body>
 </html>

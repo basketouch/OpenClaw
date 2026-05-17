@@ -591,7 +591,7 @@ async function adminFetch(path) {
   return r.json();
 }
 
-async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); loadWA(); }
+async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); loadWA(); loadTelegramStatus(); }
 
 async function loadStats() {
   try {
@@ -654,6 +654,58 @@ async function deleteTask(id) {
   if (!confirm('¿Eliminar esta tarea?')) return;
   await fetch('/api/admin/tasks/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
   loadTasks();
+}
+
+// ─── Telegram ────────────────────────────────────────────────────────────────
+
+async function loadTelegramStatus() {
+  var el = document.getElementById('tg-status');
+  var testWrap = document.getElementById('tg-test-wrap');
+  if (!el) return;
+  try {
+    var d = await adminFetch('/api/telegram/status');
+    if (d.error) {
+      el.innerHTML = '<span style="color:var(--err)">' + esc(d.error) + '</span>';
+      return;
+    }
+    if (!d.token_set) {
+      el.innerHTML = '<span style="color:var(--err)">● TELEGRAM_BOT_TOKEN no configurado en .env</span>';
+      if (testWrap) testWrap.style.display = 'none';
+    } else if (!d.chat_id) {
+      el.innerHTML = '<span style="color:var(--muted)">● Token OK — falta TELEGRAM_CHAT_ID</span><br><small style="font-size:11px">Envía un mensaje a @JLclaw13_bot y pulsa "Detectar Chat ID"</small>';
+      if (testWrap) testWrap.style.display = 'none';
+    } else {
+      el.innerHTML = '<span style="color:var(--green)">● Conectado — chat_id: ' + esc(d.chat_id) + '</span>';
+      if (testWrap) testWrap.style.display = '';
+    }
+  } catch (_) {
+    el.textContent = 'Error al cargar estado de Telegram';
+  }
+}
+
+async function detectTelegramChat() {
+  var el = document.getElementById('tg-status');
+  if (el) el.textContent = 'Detectando…';
+  try {
+    var d = await adminFetch('/api/telegram/detect-chat');
+    if (d.error) {
+      if (el) el.innerHTML = '<span style="color:var(--err)">' + esc(d.error) + '</span>';
+    } else {
+      if (el) el.innerHTML = '<span style="color:var(--green)">● chat_id detectado: ' + esc(d.chat_id) + (d.name ? ' (' + esc(d.name) + ')' : '') + '</span><br><small style="font-size:11px;color:var(--muted)">Añade TELEGRAM_CHAT_ID=' + esc(d.chat_id) + ' al .env y reinicia</small>';
+    }
+  } catch (_) {
+    if (el) el.textContent = 'Error al detectar';
+  }
+}
+
+async function testTelegram() {
+  try {
+    var d = await fetch('/api/telegram/test', { method: 'POST', headers: { Authorization: 'Bearer ' + token } }).then(function(r) { return r.json(); });
+    if (d.ok) alert('Mensaje enviado por Telegram.');
+    else alert('Error: ' + (d.error || JSON.stringify(d)));
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 // ─── Push notifications ───────────────────────────────────────────────────────

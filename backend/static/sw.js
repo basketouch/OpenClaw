@@ -1,5 +1,5 @@
-const CACHE = 'alex-v10';
-const SHELL = ['/', '/style.css?v=14', '/app.js?v=14', '/manifest.json'];
+const CACHE = 'alex-v15';
+const SHELL = ['/', '/style.css?v=15', '/app.js?v=15', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(SHELL); }));

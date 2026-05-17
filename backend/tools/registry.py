@@ -38,6 +38,7 @@ from tools.whatsapp_tool import (
     search_whatsapp_contacts,
 )
 from tools.admin_tool import SHELL_DEF, HOST_SHELL_DEF, run_shell, run_host_shell
+from tools.telegram_tool import SEND_TELEGRAM_DEF, send_telegram
 from tools.search_tool import SEARCH_DEF, web_search
 from tools.scheduler_tool import (
     CREATE_DEF as SCHED_CREATE_DEF,
@@ -64,6 +65,7 @@ register("list_whatsapp_contacts", list_whatsapp_contacts, LIST_WA_CONTACTS_DEF)
 register("search_whatsapp_contacts", search_whatsapp_contacts, SEARCH_WA_CONTACTS_DEF)
 register("run_shell", run_shell, SHELL_DEF)
 register("host_shell", run_host_shell, HOST_SHELL_DEF)
+register("send_telegram", send_telegram, SEND_TELEGRAM_DEF)
 register("web_search", web_search, SEARCH_DEF)
 register("create_scheduled_task", create_scheduled_task, SCHED_CREATE_DEF)
 register("list_scheduled_tasks", list_scheduled_tasks, SCHED_LIST_DEF)
