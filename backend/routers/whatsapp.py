@@ -55,12 +55,7 @@ async def start_session(_: str = Depends(verify_token)):
             )
             log.append(f"CREATE {r2.status_code}: {_text(r2)}")
             if r2.status_code in (200, 201):
-                # 3. Start the freshly created session
-                r3 = await client.post(
-                    f"{settings.waha_url}/api/sessions/{settings.waha_session}/start",
-                    headers=headers,
-                )
-                log.append(f"START2 {r3.status_code}: {_text(r3)}")
+                # WAHA auto-starts the session on creation — no need to call /start again
                 return {"ok": True, "log": log}
 
             return {"ok": False, "log": log}
@@ -79,6 +74,12 @@ async def qr_code(_: str = Depends(verify_token)):
                 f"{settings.waha_url}/api/{settings.waha_session}/auth/qr",
                 params={"format": "image"},
                 headers=_waha_headers(settings),
+            )
+        if r.status_code != 200:
+            return Response(
+                content=r.content,
+                media_type=r.headers.get("content-type", "text/plain"),
+                status_code=r.status_code,
             )
         return Response(content=r.content, media_type="image/png")
     except Exception as e:

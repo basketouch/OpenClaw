@@ -544,8 +544,8 @@ async function loadWA() {
     } catch (e) {
       waLog('    ERROR: ' + e.message);
     }
-    waLog('[3] Esperando 4s a que WAHA arranque…');
-    await new Promise(function(res) { setTimeout(res, 4000); });
+    waLog('[3] Esperando 6s a que WAHA genere el QR…');
+    await new Promise(function(res) { setTimeout(res, 6000); });
   }
 
   waLog('[4] GET /api/whatsapp/qr');
