@@ -248,7 +248,27 @@ function resize(el) {
 }
 
 function onKey(e) {
-  // Enter inserts newline; use the send button to send
+  if (e.key !== 'Enter' || e.shiftKey) return;
+  var ta = e.target;
+  var pos = ta.selectionStart;
+  var text = ta.value;
+  var lineStart = text.lastIndexOf('\n', pos - 1) + 1;
+  var line = text.substring(lineStart, pos);
+  var m = line.match(/^(\d+)\.\s/);
+  if (!m) return;
+  // If the line is only "N. " with nothing after, remove it and stop the list
+  if (line.trim() === m[0].trim()) {
+    e.preventDefault();
+    ta.value = text.substring(0, lineStart) + text.substring(pos);
+    ta.selectionStart = ta.selectionEnd = lineStart;
+    resize(ta);
+    return;
+  }
+  e.preventDefault();
+  var next = '\n' + (parseInt(m[1]) + 1) + '. ';
+  ta.value = text.substring(0, pos) + next + text.substring(pos);
+  ta.selectionStart = ta.selectionEnd = pos + next.length;
+  resize(ta);
 }
 
 // ─── File upload ─────────────────────────────────────────────────────────────
