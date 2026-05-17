@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     whatsapp_contacts: list[WhatsAppContact] = []
     tts_voice: str = "es-ES-AlvaroNeural"
 
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
