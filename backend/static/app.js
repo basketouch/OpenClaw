@@ -538,8 +538,9 @@ async function loadWA() {
     qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Iniciando sesión…</p>';
     try {
       const r = await fetch('/api/whatsapp/start', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-      const text = await r.text();
-      waLog('    HTTP ' + r.status + ' → ' + text);
+      const data = await r.json();
+      if (data.log) data.log.forEach(function(l) { waLog('    ' + l); });
+      else waLog('    HTTP ' + r.status + ' → ' + JSON.stringify(data));
     } catch (e) {
       waLog('    ERROR: ' + e.message);
     }

@@ -31,24 +31,42 @@ async def start_session(_: str = Depends(verify_token)):
     """Arranca la sesión de WhatsApp para poder escanear el QR."""
     settings = get_settings()
     headers = _waha_headers(settings)
+    log = []
+
+    def _text(r) -> str:
+        return r.text[:300] if r.text else "(vacío)"
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Try starting an existing session first
-            r = await client.post(
+            # 1. Try to start existing session
+            r1 = await client.post(
                 f"{settings.waha_url}/api/sessions/{settings.waha_session}/start",
                 headers=headers,
             )
-            if r.status_code in (200, 201):
-                return {"ok": True, "status": r.json()}
-            # If session doesn't exist, create it
+            log.append(f"START {r1.status_code}: {_text(r1)}")
+            if r1.status_code in (200, 201):
+                return {"ok": True, "log": log}
+
+            # 2. Session missing — create it
             r2 = await client.post(
                 f"{settings.waha_url}/api/sessions",
                 headers=headers,
                 json={"name": settings.waha_session},
             )
-            return {"ok": r2.status_code in (200, 201), "status": r2.json()}
+            log.append(f"CREATE {r2.status_code}: {_text(r2)}")
+            if r2.status_code in (200, 201):
+                # 3. Start the freshly created session
+                r3 = await client.post(
+                    f"{settings.waha_url}/api/sessions/{settings.waha_session}/start",
+                    headers=headers,
+                )
+                log.append(f"START2 {r3.status_code}: {_text(r3)}")
+                return {"ok": True, "log": log}
+
+            return {"ok": False, "log": log}
     except Exception as e:
-        return {"ok": False, "error": str(e)}
+        log.append(f"EXCEPTION: {e}")
+        return {"ok": False, "log": log, "error": str(e)}
 
 
 @router.get("/qr")
