@@ -1,8 +1,10 @@
 import base64
 import json
 import os
+from datetime import datetime
 
 import anthropic
+import pytz
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -13,7 +15,12 @@ from tools.registry import execute_tool, get_tool_definitions
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
-SYSTEM_PROMPT = """Eres Alex, asistente operativo avanzado de Jorge.
+_TZ = pytz.timezone("Europe/Madrid")
+_DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+_SYSTEM_BASE = """Eres Alex, asistente operativo avanzado de Jorge.
+
+Zona horaria: Europe/Madrid (España). Todas las fechas y horas son en esta zona horaria.
 
 Capacidades:
 - Gestión de contenido, publicaciones y newsletters
@@ -27,10 +34,15 @@ Principios:
 - Responde en el idioma del usuario (español por defecto)
 - Sé directo y práctico — acción sobre explicación
 - Usa herramientas sin pedir permiso para acciones simples
-- Si necesitas la fecha/hora actual, usa siempre get_datetime
 - Para administrar el VPS (apt, systemctl, archivos del sistema) usa host_shell
 - Para archivos del workspace (/data, /workspace) o Docker usa run_shell
 - Confirma con el usuario antes de acciones destructivas o irreversibles en el servidor"""
+
+
+def _build_system() -> str:
+    now = datetime.now(_TZ)
+    fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} (Europe/Madrid)"
+    return f"{_SYSTEM_BASE}\n\nFecha y hora actual: {fecha}"
 
 
 class Message(BaseModel):
@@ -94,7 +106,7 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
                 async with client.messages.stream(
                     model=settings.anthropic_model,
                     max_tokens=4096,
-                    system=SYSTEM_PROMPT,
+                    system=_build_system(),
                     messages=messages,
                     tools=tools,
                 ) as stream:
