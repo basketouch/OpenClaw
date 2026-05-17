@@ -55,7 +55,9 @@ async def start_session(_: str = Depends(verify_token)):
             )
             log.append(f"CREATE {r2.status_code}: {_text(r2)}")
             if r2.status_code in (200, 201):
-                # WAHA auto-starts the session on creation — no need to call /start again
+                # List all sessions to see what was actually created
+                r3 = await client.get(f"{settings.waha_url}/api/sessions", headers=headers)
+                log.append(f"LIST {r3.status_code}: {_text(r3)}")
                 return {"ok": True, "log": log}
 
             return {"ok": False, "log": log}
