@@ -1,7 +1,7 @@
 import base64
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import anthropic
 import pytz
@@ -48,7 +48,7 @@ Principios:
 
 
 def _build_system() -> str:
-    now = datetime.now(_TZ)
+    now = datetime.now(timezone.utc).astimezone(_TZ)
     fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} (Europe/Madrid)"
     return f"{_SYSTEM_BASE}\n\nFecha y hora actual: {fecha}"
 

@@ -49,7 +49,8 @@ async def _run_job(job_id: str, name: str, prompt: str):
         log.error("Scheduler: no hay ANTHROPIC_API_KEY configurada")
         return
 
-    now = datetime.now(pytz.timezone("Europe/Madrid")).strftime("%A, %d de %B de %Y, %H:%M")
+    from datetime import timezone as _utc
+    now = datetime.now(_utc.utc).astimezone(pytz.timezone("Europe/Madrid")).strftime("%A, %d de %B de %Y, %H:%M")
     system = (
         f"Eres Alex, asistente operativo de Jorge. Ahora son las {now} (hora Madrid).\n"
         "Estás ejecutando una tarea programada de forma autónoma. "
