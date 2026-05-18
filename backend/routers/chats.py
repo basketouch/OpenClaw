@@ -1,7 +1,7 @@
 import json
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -51,7 +51,7 @@ async def list_chats(_: str = Depends(verify_token)):
 
 @router.post("")
 async def create_chat(_: str = Depends(verify_token)):
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     chat = {
         "id": str(uuid.uuid4())[:8],
         "title": "Nueva conversación",
@@ -85,7 +85,7 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
         raise HTTPException(404, "Chat no encontrado")
 
     chat["messages"] = body.messages[-40:]  # keep last 40 messages max
-    chat["updated"] = datetime.now().isoformat()
+    chat["updated"] = datetime.now(timezone.utc).isoformat()
 
     if body.title:
         chat["title"] = body.title
