@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import os
 import re
@@ -13,7 +12,7 @@ from config import get_settings
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
-def _waha() -> str:
+def _openwa() -> str:
     return get_settings().waha_url
 
 
@@ -23,7 +22,7 @@ def _session() -> str:
 
 def _headers() -> dict:
     key = get_settings().waha_api_key
-    return {"X-Api-Key": key} if key else {}
+    return {"X-API-Key": key} if key else {}
 
 
 def _normalize_phone(phone: str) -> str:
@@ -35,13 +34,12 @@ def _looks_like_phone(text: str) -> bool:
     return bool(re.fullmatch(r"[\d\s\+\-\(\)]{6,}", text))
 
 
-async def _search_waha_contact(query: str) -> str | None:
-    """Search WAHA contacts by name; returns chatId (xxx@c.us) or None."""
+async def _search_openwa_contact(query: str) -> str | None:
+    """Search OpenWA contacts by name; returns chatId (xxx@c.us) or None."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
-                f"{_waha()}/api/contacts/all",
-                params={"session": _session()},
+                f"{_openwa()}/api/sessions/{_session()}/contacts",
                 headers=_headers(),
             )
             contacts = r.json()
@@ -58,20 +56,24 @@ async def _search_waha_contact(query: str) -> str | None:
 
 
 async def _resolve_contact(name_or_phone: str) -> str:
-    # 1. Check configured aliases first
+    # 1. If already a formatted chatId, use directly
+    if "@" in name_or_phone:
+        return name_or_phone
+
+    # 2. Check configured aliases
     contacts = get_settings().whatsapp_contacts
     q = name_or_phone.lower().strip()
     for c in contacts:
         if c.name.lower() == q:
             return _normalize_phone(c.phone)
 
-    # 2. If it looks like a name (not a phone number), search WAHA contacts
+    # 3. If looks like a name, search OpenWA contacts
     if not _looks_like_phone(name_or_phone):
-        waha_id = await _search_waha_contact(name_or_phone)
-        if waha_id:
-            return waha_id
+        openwa_id = await _search_openwa_contact(name_or_phone)
+        if openwa_id:
+            return openwa_id
 
-    # 3. Treat as phone number
+    # 4. Treat as phone number
     return _normalize_phone(name_or_phone)
 
 
@@ -106,13 +108,13 @@ async def _tts_ogg(text: str, voice: str) -> bytes:
 
 SEND_MSG_DEF = {
     "name": "send_whatsapp_message",
-    "description": "Envía un mensaje de texto por WhatsApp a un contacto o número.",
+    "description": "Envía un mensaje de texto por WhatsApp a un contacto, número o grupo. Para grupos usa el ID con formato {grupoId}@g.us.",
     "input_schema": {
         "type": "object",
         "properties": {
             "to": {
                 "type": "string",
-                "description": "Nombre del contacto (busca en la agenda del móvil) o número completo con código de país (ej: 34612345678)",
+                "description": "Nombre del contacto, número completo con código de país (ej: 34612345678) o ID de grupo (ej: 1234567890-1234567890@g.us)",
             },
             "message": {
                 "type": "string",
@@ -126,10 +128,14 @@ SEND_MSG_DEF = {
 
 async def send_whatsapp_message(to: str, message: str) -> dict:
     chat_id = await _resolve_contact(to)
-    payload = {"session": _session(), "chatId": chat_id, "text": message}
+    payload = {"chatId": chat_id, "text": message}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.post(f"{_waha()}/api/sendText", json=payload, headers=_headers())
+            r = await client.post(
+                f"{_openwa()}/api/sessions/{_session()}/messages/send-text",
+                json=payload,
+                headers=_headers(),
+            )
             r.raise_for_status()
         return {"success": True, "para": to, "chat_id": chat_id}
     except Exception as e:
@@ -144,7 +150,7 @@ SEND_VOICE_DEF = {
         "properties": {
             "to": {
                 "type": "string",
-                "description": "Nombre del contacto (busca en la agenda del móvil) o número completo con código de país",
+                "description": "Nombre del contacto o número completo con código de país",
             },
             "text": {
                 "type": "string",
@@ -167,16 +173,17 @@ async def send_whatsapp_voice(to: str, text: str, voice: str | None = None) -> d
         ogg_data = await _tts_ogg(text, voice)
         b64 = base64.b64encode(ogg_data).decode()
         payload = {
-            "session": _session(),
             "chatId": chat_id,
-            "file": {
-                "mimetype": "audio/ogg; codecs=opus",
-                "filename": "voice.ogg",
-                "data": b64,
-            },
+            "base64": b64,
+            "mimetype": "audio/ogg; codecs=opus",
+            "filename": "voice.ogg",
         }
         async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(f"{_waha()}/api/sendVoice", json=payload, headers=_headers())
+            r = await client.post(
+                f"{_openwa()}/api/sessions/{_session()}/messages/send-audio",
+                json=payload,
+                headers=_headers(),
+            )
             r.raise_for_status()
         return {"success": True, "para": to, "voice": voice, "characters": len(text)}
     except Exception as e:
@@ -193,11 +200,15 @@ WA_STATUS_DEF = {
 async def whatsapp_status() -> dict:
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{_waha()}/api/sessions/{_session()}", headers=_headers())
+            r = await client.get(
+                f"{_openwa()}/api/sessions/{_session()}",
+                headers=_headers(),
+            )
             data = r.json()
         status = data.get("status", "UNKNOWN")
+        connected = status in ("CONNECTED", "WORKING", "AUTHENTICATED")
         return {
-            "conectado": status == "WORKING",
+            "conectado": connected,
             "estado": status,
             "sesion": _session(),
         }
@@ -239,13 +250,12 @@ async def search_whatsapp_contacts(query: str) -> dict:
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(
-                f"{_waha()}/api/contacts/all",
-                params={"session": _session()},
+                f"{_openwa()}/api/sessions/{_session()}/contacts",
                 headers=_headers(),
             )
             all_contacts = r.json()
         if not isinstance(all_contacts, list):
-            return {"error": "Respuesta inesperada de WAHA", "raw": str(all_contacts)[:200]}
+            return {"error": "Respuesta inesperada de OpenWA", "raw": str(all_contacts)[:200]}
         q = query.lower().strip()
         results = []
         for c in all_contacts:

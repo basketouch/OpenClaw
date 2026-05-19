@@ -22,21 +22,19 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      - waha
+      - openwa
     networks:
       - default
       - n8n-infra
 
-  waha:
-    image: devlikeapro/waha:latest
-    container_name: waha
+  openwa:
+    build: ./openwa
+    container_name: openwa
     restart: unless-stopped
-    env_file: .env
     environment:
-      - WHATSAPP_DEFAULT_ENGINE=NOWEB
-      - WAHA_PRINT_QR=false
+      - PORT=2785
     volumes:
-      - waha_data:/app/.sessions
+      - openwa_data:/app/.sessions
     networks:
       - default
       - n8n-infra
@@ -49,4 +47,4 @@ networks:
 volumes:
   openclaw_workspace:
   openclaw_data:
-  waha_data:
+  openwa_data:
