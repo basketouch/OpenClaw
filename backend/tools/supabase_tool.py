@@ -1,14 +1,15 @@
 import httpx
 
-_TABLES = ["articles", "social_posts", "publish_queue", "newsletter_status"]
+_TABLES = ["articles", "social_posts", "publish_queue", "newsletter_status", "briefings"]
 
 QUERY_DEF = {
     "name": "query_newsflow",
     "description": (
         "Lee datos de la base de datos de NewsFlow (marca personal de Jorge). "
         "Tablas: articles (noticias/artículos), social_posts (posts LinkedIn/X), "
-        "publish_queue (cola de vídeos), newsletter_status (ediciones de newsletter). "
-        "Úsala para consultar artículos pendientes, posts programados, estado de newsletter, etc."
+        "publish_queue (cola de vídeos), newsletter_status (ediciones de newsletter), "
+        "briefings (resúmenes diarios con date, content, total_articles, articles JSONB). "
+        "Úsala para consultar artículos pendientes, posts programados, estado de newsletter, briefings, etc."
     ),
     "input_schema": {
         "type": "object",
