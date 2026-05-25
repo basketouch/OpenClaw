@@ -68,13 +68,14 @@ UPDATE_DEF = {
 }
 
 
-def _client_args():
+def _client_args(write=False):
     from config import get_settings
     s = get_settings()
     base = s.supabase_url.rstrip("/") + "/rest/v1"
+    key = (s.supabase_service_key or s.supabase_key) if write else s.supabase_key
     headers = {
-        "apikey": s.supabase_key,
-        "Authorization": f"Bearer {s.supabase_key}",
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
@@ -108,7 +109,7 @@ async def query_newsflow(
 
 async def insert_newsflow(table: str, data: dict) -> dict:
     try:
-        base, headers = _client_args()
+        base, headers = _client_args(write=True)
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.post(f"{base}/{table}", headers=headers, json=data)
         if r.status_code >= 400:
@@ -120,7 +121,7 @@ async def insert_newsflow(table: str, data: dict) -> dict:
 
 async def update_newsflow(table: str, data: dict, filters: dict) -> dict:
     try:
-        base, headers = _client_args()
+        base, headers = _client_args(write=True)
         params = {k: f"eq.{v}" for k, v in filters.items()}
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.patch(f"{base}/{table}", headers=headers, json=data, params=params)

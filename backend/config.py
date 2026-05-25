@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
+    supabase_service_key: Optional[str] = None
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
