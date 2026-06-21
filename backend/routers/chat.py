@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from auth import verify_token
-from config import get_settings
+from config import get_ai_client_and_model, get_settings
 from tools.registry import execute_tool, get_tool_definitions
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -93,7 +93,7 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
 
     async def generate():
         try:
-            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            client, model = get_ai_client_and_model()
             tools = get_tool_definitions()
             messages = []
 
@@ -112,7 +112,7 @@ async def chat(request: ChatRequest, _: str = Depends(verify_token)):
 
             while True:
                 async with client.messages.stream(
-                    model=settings.anthropic_model,
+                    model=model,
                     max_tokens=4096,
                     system=_build_system(),
                     messages=messages,

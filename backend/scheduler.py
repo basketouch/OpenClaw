@@ -39,14 +39,14 @@ def _make_trigger(schedule_type: str, params: dict):
 
 
 async def _run_job(job_id: str, name: str, prompt: str):
-    from anthropic import AsyncAnthropic
     from tools.registry import execute_tool, get_tool_definitions
-    from config import get_settings
+    from config import get_ai_client_and_model, get_settings
 
     log.info("Scheduler: ejecutando tarea '%s' (%s)", name, job_id)
     settings = get_settings()
-    if not settings.anthropic_api_key:
-        log.error("Scheduler: no hay ANTHROPIC_API_KEY configurada")
+    client, model = get_ai_client_and_model()
+    if not settings.anthropic_api_key and not (settings.model_provider == "glm" and settings.glm_api_key):
+        log.error("Scheduler: no hay API key configurada")
         return
 
     from datetime import timezone as _utc
@@ -57,13 +57,12 @@ async def _run_job(job_id: str, name: str, prompt: str):
         "Completa la tarea directamente con las herramientas disponibles sin pedir confirmación."
     )
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
     messages = [{"role": "user", "content": prompt}]
     final_text = ""
 
     for _ in range(10):
         resp = await client.messages.create(
-            model=settings.anthropic_model,
+            model=model,
             max_tokens=4096,
             system=system,
             tools=get_tool_definitions(),

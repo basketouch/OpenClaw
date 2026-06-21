@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-haiku-4-5-20251001"
 
+    model_provider: str = "anthropic"  # "anthropic" | "glm"
+    glm_api_key: Optional[str] = None
+    glm_model: str = "glm-5.2"
+    glm_base_url: str = "https://api.z.ai/api/anthropic"
+
     workspace_path: str = "/opt/openclaw/workspace"
     debug: bool = False
 
@@ -47,3 +52,13 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_ai_client_and_model():
+    """Devuelve (cliente AsyncAnthropic, nombre del modelo) según MODEL_PROVIDER."""
+    import anthropic
+
+    s = get_settings()
+    if s.model_provider == "glm" and s.glm_api_key:
+        return anthropic.AsyncAnthropic(api_key=s.glm_api_key, base_url=s.glm_base_url), s.glm_model
+    return anthropic.AsyncAnthropic(api_key=s.anthropic_api_key), s.anthropic_model
