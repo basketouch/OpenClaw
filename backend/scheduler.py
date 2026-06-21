@@ -38,27 +38,13 @@ def _make_trigger(schedule_type: str, params: dict):
     raise ValueError(f"Tipo de schedule desconocido: {schedule_type}")
 
 
-async def _run_job(job_id: str, name: str, prompt: str):
+async def _run_job_anthropic(system: str, prompt: str) -> str:
     from tools.registry import execute_tool, get_tool_definitions
-    from config import get_ai_client_and_model, get_settings
+    from config import get_ai_client_and_model
 
-    log.info("Scheduler: ejecutando tarea '%s' (%s)", name, job_id)
-    settings = get_settings()
     client, model = get_ai_client_and_model()
-    if not settings.anthropic_api_key and not (settings.model_provider == "glm" and settings.glm_api_key):
-        log.error("Scheduler: no hay API key configurada")
-        return
-
-    from datetime import timezone as _utc
-    now = datetime.now(_utc.utc).astimezone(pytz.timezone("Europe/Madrid")).strftime("%A, %d de %B de %Y, %H:%M")
-    system = (
-        f"Eres Alex, asistente operativo de Jorge. Ahora son las {now} (hora Madrid).\n"
-        "Estás ejecutando una tarea programada de forma autónoma. "
-        "Completa la tarea directamente con las herramientas disponibles sin pedir confirmación."
-    )
-
     messages = [{"role": "user", "content": prompt}]
-    final_text = ""
+    final_text = "Tarea ejecutada."
 
     for _ in range(10):
         resp = await client.messages.create(
@@ -90,6 +76,80 @@ async def _run_job(job_id: str, name: str, prompt: str):
             messages.append({"role": "user", "content": results})
         else:
             break
+
+    return final_text
+
+
+async def _run_job_groq(system: str, prompt: str) -> str:
+    from tools.registry import execute_tool, get_tool_definitions
+    from config import get_groq_client_and_model
+    from groq_compat import to_openai_tools
+
+    client, model = get_groq_client_and_model()
+    tools = to_openai_tools(get_tool_definitions())
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
+    final_text = "Tarea ejecutada."
+
+    for _ in range(10):
+        resp = await client.chat.completions.create(
+            model=model,
+            max_tokens=4096,
+            messages=messages,
+            tools=tools,
+        )
+        choice = resp.choices[0]
+        msg = choice.message
+
+        if choice.finish_reason != "tool_calls" or not msg.tool_calls:
+            final_text = (msg.content or "Tarea ejecutada.")[:140]
+            break
+
+        messages.append({
+            "role": "assistant",
+            "content": msg.content,
+            "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+        })
+        for tc in msg.tool_calls:
+            try:
+                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
+                out = await execute_tool(tc.function.name, args)
+            except Exception as e:
+                out = f"Error: {e}"
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": json.dumps(out, ensure_ascii=False, default=str),
+            })
+
+    return final_text
+
+
+async def _run_job(job_id: str, name: str, prompt: str):
+    from config import get_settings
+
+    log.info("Scheduler: ejecutando tarea '%s' (%s)", name, job_id)
+    settings = get_settings()
+
+    if settings.model_provider == "groq":
+        if not settings.groq_api_key:
+            log.error("Scheduler: no hay GROQ_API_KEY configurada")
+            return
+    elif not settings.anthropic_api_key and not (settings.model_provider == "glm" and settings.glm_api_key):
+        log.error("Scheduler: no hay API key configurada")
+        return
+
+    from datetime import timezone as _utc
+    now = datetime.now(_utc.utc).astimezone(pytz.timezone("Europe/Madrid")).strftime("%A, %d de %B de %Y, %H:%M")
+    system = (
+        f"Eres Alex, asistente operativo de Jorge. Ahora son las {now} (hora Madrid).\n"
+        "Estás ejecutando una tarea programada de forma autónoma. "
+        "Completa la tarea directamente con las herramientas disponibles sin pedir confirmación."
+    )
+
+    if settings.model_provider == "groq":
+        final_text = await _run_job_groq(system, prompt)
+    else:
+        final_text = await _run_job_anthropic(system, prompt)
 
     log.info("Scheduler: tarea '%s' completada", name)
     try:

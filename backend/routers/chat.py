@@ -87,12 +87,87 @@ def _load_file_block(file_id: str, filename: str, mime_type: str) -> dict | None
     return None
 
 
+async def _generate_groq(request: ChatRequest):
+    from config import get_groq_client_and_model
+    from groq_compat import to_openai_tools
+
+    client, model = get_groq_client_and_model()
+    tools = to_openai_tools(get_tool_definitions())
+    messages = [{"role": "system", "content": _build_system()}]
+    for m in request.messages:
+        messages.append({"role": m.role, "content": m.content})
+
+    while True:
+        stream = await client.chat.completions.create(
+            model=model,
+            max_tokens=4096,
+            messages=messages,
+            tools=tools,
+            stream=True,
+        )
+
+        text_parts: list[str] = []
+        tool_calls: dict[int, dict] = {}
+        finish_reason = None
+
+        async for chunk in stream:
+            choice = chunk.choices[0]
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+            delta = choice.delta
+            if delta.content:
+                text_parts.append(delta.content)
+                yield f"data: {json.dumps({'type': 'text', 'content': delta.content})}\n\n"
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    entry = tool_calls.setdefault(tc.index, {"id": None, "name": "", "arguments": "", "started": False})
+                    if tc.id:
+                        entry["id"] = tc.id
+                    if tc.function and tc.function.name:
+                        entry["name"] += tc.function.name
+                        if not entry["started"]:
+                            entry["started"] = True
+                            yield f"data: {json.dumps({'type': 'tool_start', 'name': entry['name']})}\n\n"
+                    if tc.function and tc.function.arguments:
+                        entry["arguments"] += tc.function.arguments
+
+        if finish_reason != "tool_calls" or not tool_calls:
+            messages.append({"role": "assistant", "content": "".join(text_parts)})
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            break
+
+        assistant_tool_calls = [
+            {"id": e["id"], "type": "function", "function": {"name": e["name"], "arguments": e["arguments"]}}
+            for e in tool_calls.values()
+        ]
+        messages.append({
+            "role": "assistant",
+            "content": "".join(text_parts) or None,
+            "tool_calls": assistant_tool_calls,
+        })
+
+        for e in tool_calls.values():
+            try:
+                args = json.loads(e["arguments"]) if e["arguments"] else {}
+                result = await execute_tool(e["name"], args)
+                result_str = json.dumps(result) if not isinstance(result, str) else result
+            except Exception as ex:
+                result_str = f"Error ejecutando {e['name']}: {ex}"
+            yield f"data: {json.dumps({'type': 'tool_done', 'name': e['name']})}\n\n"
+            messages.append({"role": "tool", "tool_call_id": e["id"], "content": result_str})
+
+
 @router.post("/chat")
 async def chat(request: ChatRequest, _: str = Depends(verify_token)):
     settings = get_settings()
 
     async def generate():
         try:
+            if settings.model_provider == "groq" and settings.groq_api_key:
+                async for chunk in _generate_groq(request):
+                    yield chunk
+                return
+
             client, model = get_ai_client_and_model()
             tools = get_tool_definitions()
             messages = []
