@@ -1,5 +1,4 @@
-"""Utilidades para usar Groq (API compatible con OpenAI) con las mismas tool
-definitions que usamos para Claude/GLM (formato de la API de Messages de Anthropic)."""
+"""Conversión de definiciones internas de tools al formato de function tools de OpenAI."""
 
 
 def to_openai_tools(tools: list[dict]) -> list[dict]:
