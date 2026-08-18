@@ -4,13 +4,13 @@ import pytz
 
 DEFINITION = {
     "name": "get_datetime",
-    "description": "Obtiene la fecha y hora actual en la zona horaria especificada.",
+    "description": "Obtiene la fecha y hora actual. Si no se indica zona horaria, usa la configurada para Jorge.",
     "input_schema": {
         "type": "object",
         "properties": {
             "timezone": {
                 "type": "string",
-                "description": "Zona horaria IANA. Ejemplos: Europe/Madrid, America/Mexico_City, America/Bogota. Por defecto: Europe/Madrid",
+                "description": "Zona horaria IANA opcional. Ejemplos: Europe/Madrid, Asia/Jakarta, America/Bogota.",
             }
         },
         "required": [],
@@ -20,11 +20,18 @@ DEFINITION = {
 _DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
-def get_datetime(timezone: str = "Europe/Madrid") -> dict:
+def get_datetime(timezone: str | None = None) -> dict:
+    from config import get_settings
+
+    fallback = get_settings().user_timezone
+    tz_name = timezone or fallback
     try:
-        tz = pytz.timezone(timezone)
+        tz = pytz.timezone(tz_name)
     except pytz.exceptions.UnknownTimeZoneError:
-        tz = pytz.timezone("Europe/Madrid")
+        try:
+            tz = pytz.timezone(fallback)
+        except pytz.exceptions.UnknownTimeZoneError:
+            tz = pytz.UTC
 
     now = datetime.now(tz)
     return {
