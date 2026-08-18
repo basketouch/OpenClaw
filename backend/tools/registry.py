@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 _registry: dict[str, dict] = {}
 
@@ -8,8 +8,25 @@ def register(name: str, func: Callable, definition: dict) -> None:
     _registry[name] = {"func": func, "definition": definition}
 
 
-def get_tool_definitions() -> list[dict]:
-    return [entry["definition"] for entry in _registry.values()]
+def get_tool_definitions(names: Iterable[str] | None = None) -> list[dict]:
+    if names is None:
+        return [entry["definition"] for entry in _registry.values()]
+    allowed = set(names)
+    return [entry["definition"] for name, entry in _registry.items() if name in allowed]
+
+
+def get_openai_tool_definitions(names: Iterable[str] | None = None) -> list[dict]:
+    """Convierte las definiciones internas al formato nativo de Responses API."""
+    tools = []
+    for definition in get_tool_definitions(names):
+        tools.append({
+            "type": "function",
+            "name": definition["name"],
+            "description": definition.get("description", ""),
+            "parameters": definition.get("input_schema", {"type": "object", "properties": {}}),
+            "strict": False,
+        })
+    return tools
 
 
 async def execute_tool(name: str, inputs: dict) -> Any:
@@ -19,6 +36,32 @@ async def execute_tool(name: str, inputs: dict) -> Any:
     if asyncio.iscoroutinefunction(func):
         return await func(**inputs)
     return func(**inputs)
+
+
+# Perfiles: cada petición recibe solo las herramientas relevantes.
+TOOL_PROFILES: dict[str, set[str]] = {
+    "general": {
+        "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
+        "web_search", "list_scheduled_tasks", "create_scheduled_task",
+        "delete_scheduled_task", "toggle_scheduled_task",
+    },
+    "communications": {
+        "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
+        "send_email", "reply_email", "send_whatsapp_message", "send_whatsapp_voice",
+        "whatsapp_status", "list_whatsapp_contacts", "search_whatsapp_contacts", "send_telegram",
+    },
+    "newsflow": {
+        "get_datetime", "query_newsflow", "insert_newsflow", "update_newsflow", "web_search",
+    },
+    "admin": {
+        "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
+        "run_shell", "host_shell",
+    },
+}
+
+
+def get_profile_tools(profile: str) -> list[dict]:
+    return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]))
 
 
 # Register built-in tools
