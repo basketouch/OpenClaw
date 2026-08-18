@@ -256,7 +256,6 @@ function onKey(e) {
   var line = text.substring(lineStart, pos);
   var m = line.match(/^(\d+)\.\s/);
   if (!m) return;
-  // If the line is only "N. " with nothing after, remove it and stop the list
   if (line.trim() === m[0].trim()) {
     e.preventDefault();
     ta.value = text.substring(0, lineStart) + text.substring(pos);
@@ -337,7 +336,7 @@ async function sendMessage() {
   let responseText = '';
 
   try {
-    const contextMessages = history.slice(-5);
+    const contextMessages = history.slice(-16);
     const body = { messages: contextMessages };
     if (filePayload) {
       body.file_id = filePayload.file_id;
