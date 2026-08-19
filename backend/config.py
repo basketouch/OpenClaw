@@ -12,11 +12,6 @@ class GmailAccount(BaseModel):
     password: str  # App Password de Google
 
 
-class WhatsAppContact(BaseModel):
-    name: str
-    phone: str  # número completo con código de país, ej: 34612345678
-
-
 class Settings(BaseSettings):
     auth_secret: str = "change-me-please"
     auth_username: str = "jorge"
@@ -34,12 +29,6 @@ class Settings(BaseSettings):
     debug: bool = False
 
     gmail_accounts: list[GmailAccount] = []
-
-    waha_url: str = "http://waha:3000"
-    waha_session: str = "default"
-    waha_api_key: Optional[str] = None
-    whatsapp_contacts: list[WhatsAppContact] = []
-    tts_voice: str = "es-ES-AlvaroNeural"
 
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None

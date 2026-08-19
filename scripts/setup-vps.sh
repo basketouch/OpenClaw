@@ -67,7 +67,7 @@ if [ ! -f "$REPO_DIR/.env" ]; then
   echo "      Archivo .env creado."
   echo "      AUTH_SECRET generado automáticamente."
   echo ""
-  echo "  ➜  Edita $REPO_DIR/.env y añade tu ANTHROPIC_API_KEY"
+  echo "  ➜  Edita $REPO_DIR/.env y añade tu OPENAI_API_KEY"
 else
   echo "      .env ya existe, no se sobreescribe."
 fi

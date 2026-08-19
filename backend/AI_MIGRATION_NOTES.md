@@ -14,7 +14,7 @@ Before deploying this branch:
 5. Smoke test:
    - simple chat (Luna)
    - web search/general tool
-   - email/WhatsApp routing
+   - email/Telegram routing
    - NewsFlow routing
    - admin/VPS routing (Terra)
    - scheduler task

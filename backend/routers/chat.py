@@ -115,7 +115,7 @@ def _route_mode(request: ChatRequest) -> str:
         return "newsflow"
 
     communication_markers = (
-        "email", "correo", "gmail", "whatsapp", "telegram", "mensaje a ", "escribe a ",
+        "email", "correo", "gmail", "telegram", "mensaje a ", "escribe a ",
         "respóndele", "respondele", "contesta a ",
     )
     if any(marker in text for marker in communication_markers):

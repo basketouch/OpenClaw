@@ -4,7 +4,7 @@ CREATE_DEF = {
     "name": "create_scheduled_task",
     "description": (
         "Crea una tarea programada que Alex ejecutará automáticamente. "
-        "Puede enviar WhatsApps, revisar emails, crear resúmenes, etc. "
+        "Puede enviar mensajes por Telegram, revisar emails, crear resúmenes, etc. "
         "Para cron usa schedule_type='cron' con params como {hour:9,minute:0}. "
         "Para repetir cada N horas/minutos usa schedule_type='interval' con {hours:2}."
     ),
@@ -16,7 +16,7 @@ CREATE_DEF = {
                 "type": "string",
                 "description": (
                     "Instrucción completa de lo que Alex hará al ejecutarse. "
-                    "Ej: 'Revisa mis emails no leídos y mándame un resumen por WhatsApp a Jorge'"
+                    "Ej: 'Revisa mis emails no leídos y mándame un resumen por Telegram a Jorge'"
                 ),
             },
             "schedule_type": {
