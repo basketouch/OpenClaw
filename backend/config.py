@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 class GmailAccount(BaseModel):
     name: str
     email: str
-    password: str  # App Password de Google
+    password: str
 
 
 class Settings(BaseSettings):
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     auth_username: str = "jorge"
     auth_password: str = "change-me-please"
 
-    # OpenAI — motor único de Alex
+    # OpenAI
     openai_api_key: Optional[str] = None
     alex_model: str = "gpt-5.6-luna"
     alex_complex_model: str = "gpt-5.6-terra"
@@ -33,9 +33,15 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # NewsFlow Supabase
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
+
+    # English Coach Supabase — separate project (Jorge Lorenzo Coach)
+    english_supabase_url: Optional[str] = None
+    english_supabase_service_key: Optional[str] = None
+    english_supabase_user_id: Optional[str] = None
 
     # Allow a VPS .env to retain keys from retired providers during migration.
     # OpenClaw does not read or use them.

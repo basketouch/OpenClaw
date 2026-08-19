@@ -16,7 +16,6 @@ def get_tool_definitions(names: Iterable[str] | None = None) -> list[dict]:
 
 
 def get_openai_tool_definitions(names: Iterable[str] | None = None) -> list[dict]:
-    """Convierte las definiciones internas al formato nativo de Responses API."""
     tools = []
     for definition in get_tool_definitions(names):
         tools.append({
@@ -38,7 +37,6 @@ async def execute_tool(name: str, inputs: dict) -> Any:
     return func(**inputs)
 
 
-# Perfiles: cada petición recibe solo las herramientas relevantes.
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
         "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
@@ -56,6 +54,10 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
         "run_shell", "host_shell",
     },
+    "english": {
+        "get_datetime", "save_english_phrase", "search_english_phrases", "get_english_review",
+        "record_english_result", "get_english_progress",
+    },
 }
 
 
@@ -63,7 +65,6 @@ def get_profile_tools(profile: str) -> list[dict]:
     return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]))
 
 
-# Register built-in tools
 from tools.datetime_tool import DEFINITION as DATETIME_DEF
 from tools.datetime_tool import get_datetime
 from tools.workspace_tool import LIST_DEF, READ_DEF, WRITE_DEF
@@ -88,6 +89,12 @@ from tools.scheduler_tool import (
     TOGGLE_DEF as SCHED_TOGGLE_DEF,
     create_scheduled_task, list_scheduled_tasks, delete_scheduled_task, toggle_scheduled_task,
 )
+from tools.english_tool import (
+    SAVE_DEF as EN_SAVE_DEF, SEARCH_DEF as EN_SEARCH_DEF, REVIEW_DEF as EN_REVIEW_DEF,
+    RESULT_DEF as EN_RESULT_DEF, PROGRESS_DEF as EN_PROGRESS_DEF,
+    save_english_phrase, search_english_phrases, get_english_review,
+    record_english_result, get_english_progress,
+)
 
 register("get_datetime", get_datetime, DATETIME_DEF)
 register("list_workspace_files", list_workspace_files, LIST_DEF)
@@ -110,3 +117,8 @@ register("create_scheduled_task", create_scheduled_task, SCHED_CREATE_DEF)
 register("list_scheduled_tasks", list_scheduled_tasks, SCHED_LIST_DEF)
 register("delete_scheduled_task", delete_scheduled_task, SCHED_DELETE_DEF)
 register("toggle_scheduled_task", toggle_scheduled_task, SCHED_TOGGLE_DEF)
+register("save_english_phrase", save_english_phrase, EN_SAVE_DEF)
+register("search_english_phrases", search_english_phrases, EN_SEARCH_DEF)
+register("get_english_review", get_english_review, EN_REVIEW_DEF)
+register("record_english_result", record_english_result, EN_RESULT_DEF)
+register("get_english_progress", get_english_progress, EN_PROGRESS_DEF)

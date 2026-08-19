@@ -53,6 +53,11 @@ Reglas:
 - En baloncesto, conserva terminología habitual internacional (spacing, closeout, low man, drop, switch, etc.).
 - Si Jorge escribe en español preguntando cómo decir algo, responde primero con la frase inglesa y después una explicación breve.
 - Si practica conversación, no interrumpas cada frase: deja que termine y corrige después los errores de mayor impacto.
+- Si Jorge dice “guárdalo”, “esto me cuesta”, “lo uso mucho” o equivalente, usa save_english_phrase.
+- Antes de guardar, prioriza frases reutilizables y chunks; evita almacenar ruido o palabras triviales.
+- Si pide repasar, usa get_english_review y construye ejercicios solo con su material guardado.
+- Si responde a un ejercicio, registra el resultado con record_english_result cuando la frase esté identificada.
+- Si pregunta por su progreso, usa get_english_progress.
 """
 
 
@@ -96,6 +101,7 @@ def _route_mode(request: ChatRequest) -> str:
     english_markers = (
         "english coach", "inglés", "ingles", "cómo digo", "como digo", "translate to english",
         "corrige mi inglés", "corrige mi ingles", "practiquemos inglés", "practice english",
+        "guarda esta frase", "repasemos inglés", "repasemos ingles",
     )
     if any(marker in text for marker in english_markers):
         return "english"
@@ -141,7 +147,7 @@ def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
 
 
 def _profile_for_mode(mode: str) -> str:
-    if mode in {"admin", "newsflow", "communications"}:
+    if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"
 
@@ -183,15 +189,12 @@ def _build_file_content(file_id: str, filename: str, mime_type: str) -> dict | N
 
 
 def _build_input(request: ChatRequest) -> list[dict]:
-    # El cliente puede enviar más historial, pero el servidor impone un máximo razonable.
     messages = request.messages[-16:]
     result: list[dict] = []
     for i, message in enumerate(messages):
         role = message.role if message.role in {"user", "assistant"} else "user"
         is_last = i == len(messages) - 1
-        if (
-            role == "user" and is_last and request.file_id and request.mime_type
-        ):
+        if role == "user" and is_last and request.file_id and request.mime_type:
             file_content = _build_file_content(
                 request.file_id,
                 request.filename or "archivo",
@@ -249,13 +252,12 @@ async def _run_openai(request: ChatRequest):
     mode = _route_mode(request)
     profile = _profile_for_mode(mode)
     model, reasoning_effort = _select_model(request, mode)
-    tools = [] if mode == "english" else get_profile_tools(profile)
+    tools = get_profile_tools(profile)
     input_items = _build_input(request)
     client = get_openai_client()
     started = time.monotonic()
     final_response = None
 
-    # Un máximo evita bucles de herramientas accidentales.
     for _ in range(8):
         response = await client.responses.create(
             model=model,
@@ -276,8 +278,6 @@ async def _run_openai(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
             break
 
-        # Al gestionar el contexto manualmente hay que reenviar los output items,
-        # incluidos reasoning items, antes de los resultados de las funciones.
         input_items.extend(_serialize_output_items(response))
 
         for call in calls:

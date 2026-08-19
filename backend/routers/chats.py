@@ -10,6 +10,7 @@ from auth import verify_token
 
 CHATS_DIR = "/data/chats"
 router = APIRouter(prefix="/api/chats", tags=["chats"])
+VALID_MODES = {"auto", "general", "english", "admin", "newsflow", "communications"}
 
 
 def _path(cid: str) -> str:
@@ -42,6 +43,7 @@ async def list_chats(_: str = Depends(verify_token)):
                 "title": c.get("title", "Nueva conversación"),
                 "updated": c.get("updated", c.get("created", "")),
                 "preview": c.get("preview", ""),
+                "mode": c.get("mode", "auto"),
             })
         except Exception:
             pass
@@ -49,15 +51,22 @@ async def list_chats(_: str = Depends(verify_token)):
     return {"chats": chats}
 
 
+class CreateBody(BaseModel):
+    mode: str = "auto"
+
+
 @router.post("")
-async def create_chat(_: str = Depends(verify_token)):
+async def create_chat(body: CreateBody | None = None, _: str = Depends(verify_token)):
     now = datetime.now(timezone.utc).isoformat()
+    requested_mode = (body.mode if body else "auto")
+    mode = requested_mode if requested_mode in VALID_MODES else "auto"
     chat = {
         "id": str(uuid.uuid4())[:8],
         "title": "Nueva conversación",
         "created": now,
         "updated": now,
         "preview": "",
+        "mode": mode,
         "messages": [],
     }
     _save(chat)
@@ -67,7 +76,9 @@ async def create_chat(_: str = Depends(verify_token)):
 @router.get("/{cid}")
 async def get_chat(cid: str, _: str = Depends(verify_token)):
     try:
-        return _load(cid)
+        chat = _load(cid)
+        chat.setdefault("mode", "auto")
+        return chat
     except FileNotFoundError:
         raise HTTPException(404, "Chat no encontrado")
 
@@ -75,6 +86,7 @@ async def get_chat(cid: str, _: str = Depends(verify_token)):
 class SaveBody(BaseModel):
     messages: list[dict]
     title: str | None = None
+    mode: str | None = None
 
 
 @router.put("/{cid}")
@@ -84,8 +96,13 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
     except FileNotFoundError:
         raise HTTPException(404, "Chat no encontrado")
 
-    chat["messages"] = body.messages[-40:]  # keep last 40 messages max
+    chat["messages"] = body.messages[-40:]
     chat["updated"] = datetime.now(timezone.utc).isoformat()
+
+    if body.mode in VALID_MODES:
+        chat["mode"] = body.mode
+    else:
+        chat.setdefault("mode", "auto")
 
     if body.title:
         chat["title"] = body.title
@@ -102,7 +119,7 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
             break
 
     _save(chat)
-    return {"success": True}
+    return {"success": True, "mode": chat.get("mode", "auto")}
 
 
 @router.delete("/{cid}")
