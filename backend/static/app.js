@@ -256,7 +256,6 @@ function onKey(e) {
   var line = text.substring(lineStart, pos);
   var m = line.match(/^(\d+)\.\s/);
   if (!m) return;
-  // If the line is only "N. " with nothing after, remove it and stop the list
   if (line.trim() === m[0].trim()) {
     e.preventDefault();
     ta.value = text.substring(0, lineStart) + text.substring(pos);
@@ -337,7 +336,7 @@ async function sendMessage() {
   let responseText = '';
 
   try {
-    const contextMessages = history.slice(-5);
+    const contextMessages = history.slice(-16);
     const body = { messages: contextMessages };
     if (filePayload) {
       body.file_id = filePayload.file_id;
@@ -512,52 +511,6 @@ init();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(function() {});
-}
-
-// ─── WhatsApp (dentro del panel admin) ───────────────────────────────────────
-
-async function loadWA() {
-  const statusBar = document.getElementById('wa-status-bar');
-  const qrArea = document.getElementById('wa-qr-area');
-
-  statusBar.innerHTML = '<div class="wa-status mid">Comprobando conexión…</div>';
-  qrArea.innerHTML = '';
-
-  var estado = 'UNKNOWN';
-  try {
-    const r = await fetch('/api/whatsapp/status', { headers: { Authorization: 'Bearer ' + token } });
-    var data = {};
-    try { data = await r.json(); } catch (_) {}
-    const connected = data.conectado || data.status === 'WORKING';
-    estado = data.estado || data.status || 'UNKNOWN';
-    statusBar.innerHTML = connected
-      ? '<div class="wa-status ok">● Conectado — ' + esc(estado) + '</div>'
-      : '<div class="wa-status err">● Desconectado — ' + esc(estado) + '</div>';
-    if (connected) {
-      qrArea.innerHTML = '<p style="color:var(--muted);font-size:14px;padding:16px 0">WhatsApp ya está vinculado y funcionando.</p>';
-      return;
-    }
-  } catch (_) {
-    statusBar.innerHTML = '<div class="wa-status err">● No se pudo conectar con WAHA</div>';
-  }
-
-  if (estado === 'STOPPED' || estado === 'UNKNOWN' || estado === 'FAILED') {
-    qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Iniciando sesión…</p>';
-    try {
-      await fetch('/api/whatsapp/start', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
-    } catch (_) {}
-    await new Promise(function(res) { setTimeout(res, 6000); });
-  }
-
-  qrArea.innerHTML = '<p style="color:var(--muted);font-size:13px">Cargando QR…</p>';
-  try {
-    const r = await fetch('/api/whatsapp/qr', { headers: { Authorization: 'Bearer ' + token } });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const blob = await r.blob();
-    qrArea.innerHTML = '<img src="' + URL.createObjectURL(blob) + '" alt="QR WhatsApp" style="border-radius:12px;max-width:220px;width:100%">';
-  } catch (e) {
-    qrArea.innerHTML = '<p style="color:var(--err);font-size:13px">No se pudo cargar el QR: ' + esc(e.message) + '</p>';
-  }
 }
 
 function toggleSection(title) {

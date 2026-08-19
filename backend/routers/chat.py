@@ -1,56 +1,59 @@
 import base64
 import json
 import os
+import time
 from datetime import datetime, timezone
 
-import anthropic
 import pytz
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from auth import verify_token
-from config import get_ai_client_and_model, get_settings
-from tools.registry import execute_tool, get_tool_definitions
+from config import get_openai_client, get_settings
+from tools.registry import execute_tool, get_profile_tools
 
 router = APIRouter(prefix="/api", tags=["chat"])
-
-_TZ = pytz.timezone("Europe/Madrid")
 _DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+_USAGE_FILE = "/data/ai_usage.jsonl"
 
-_SYSTEM_BASE = """Eres Alex, asistente operativo avanzado de Jorge.
+_ALEX_BASE = """Eres Alex, el asistente operativo personal de Jorge.
 
-Zona horaria: Europe/Madrid (España). Todas las fechas y horas son en esta zona horaria.
-
-Capacidades:
-- Gestión de contenido, publicaciones y newsletters
-- Organización de proyectos y tareas de negocio
-- Análisis de información y documentos
-- Acceso al workspace de archivos del servidor
-- Búsqueda de información actualizada en internet
-- Administración completa del servidor VPS (paquetes, servicios, configuración del sistema)
-
-NewsFlow (marca personal de Jorge — acceso directo a base de datos):
-- articles: noticias y artículos curados (título, URL, resumen, estado)
-- social_posts: posts de LinkedIn y X (contenido, plataforma, estado, fecha programada)
-- newsletter_status: ediciones del newsletter INSIDE Life
-- publish_queue: cola de vídeos para publicar
-- Usa query_newsflow, insert_newsflow, update_newsflow para leer y gestionar el contenido
-- Cuando Jorge pregunte por artículos, posts, newsletter o vídeos, consulta NewsFlow directamente
+Tu objetivo es resolver tareas con fiabilidad y el mínimo trabajo posible para Jorge.
 
 Principios:
-- Responde en el idioma del usuario (español por defecto)
-- Sé directo y práctico — acción sobre explicación
-- Usa herramientas sin pedir permiso para acciones simples
-- Para administrar el VPS (apt, systemctl, archivos del sistema) usa host_shell
-- Para archivos del workspace (/data, /workspace) o Docker usa run_shell
-- Confirma con el usuario antes de acciones destructivas o irreversibles en el servidor"""
+- Responde en español por defecto, salvo que el usuario use otro idioma o pida otro.
+- Sé directo, práctico y orientado a la acción.
+- No inventes datos que puedas obtener con una herramienta disponible.
+- Usa herramientas cuando sean necesarias; no digas que has hecho algo si no has ejecutado la herramienta correspondiente.
+- Si una herramienta falla, explica brevemente qué falló y conserva el error real.
+- No repitas preguntas cuya respuesta ya esté en el contexto.
+- Para acciones simples y reversibles, actúa directamente.
+- Antes de acciones destructivas o irreversibles de servidor, confirma.
+- No expongas secretos, tokens ni contraseñas.
+- Mantén respuestas compactas salvo que Jorge pida detalle.
 
+NewsFlow:
+- articles: noticias y artículos curados.
+- social_posts: publicaciones LinkedIn/X.
+- newsletter_status: ediciones de INSIDE Life.
+- publish_queue: vídeos pendientes.
+Cuando la consulta sea de NewsFlow, usa sus herramientas y no supongas el estado actual.
+"""
 
-def _build_system() -> str:
-    now = datetime.now(timezone.utc).astimezone(_TZ)
-    fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} (Europe/Madrid)"
-    return f"{_SYSTEM_BASE}\n\nFecha y hora actual: {fecha}"
+_ENGLISH_BASE = """Eres English Coach, el asistente personal de inglés de Jorge.
+
+Objetivo: mejorar su inglés hablado y profesional usando situaciones reales de baloncesto, staff, reuniones, academia, negocio y vida diaria.
+
+Reglas:
+- Jorge es español y prioriza inglés funcional, natural y fácil de producir oralmente.
+- Corrige solo lo que importa; no conviertas una frase correcta y simple en inglés innecesariamente sofisticado.
+- Prioriza chunks y frases completas sobre listas de vocabulario aislado.
+- Cuando propongas una frase, ofrece primero la versión más útil y natural para decirla en voz alta.
+- En baloncesto, conserva terminología habitual internacional (spacing, closeout, low man, drop, switch, etc.).
+- Si Jorge escribe en español preguntando cómo decir algo, responde primero con la frase inglesa y después una explicación breve.
+- Si practica conversación, no interrumpas cada frase: deja que termine y corrige después los errores de mayor impacto.
+"""
 
 
 class Message(BaseModel):
@@ -60,193 +63,261 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
+    mode: str = "auto"  # auto | general | english | admin | newsflow | communications
     file_id: str | None = None
     filename: str | None = None
     mime_type: str | None = None
 
 
-def _load_file_block(file_id: str, filename: str, mime_type: str) -> dict | None:
-    uploads_dir = "/data/uploads"
-    for fname in os.listdir(uploads_dir) if os.path.isdir(uploads_dir) else []:
-        if fname.startswith(f"{file_id}_"):
-            path = os.path.join(uploads_dir, fname)
-            with open(path, "rb") as f:
-                data = f.read()
-            b64 = base64.standard_b64encode(data).decode()
+def _build_instructions(mode: str) -> str:
+    settings = get_settings()
+    try:
+        tz = pytz.timezone(settings.user_timezone)
+    except pytz.exceptions.UnknownTimeZoneError:
+        tz = pytz.timezone("Europe/Madrid")
+    now = datetime.now(timezone.utc).astimezone(tz)
+    fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} ({tz.zone})"
+    base = _ENGLISH_BASE if mode == "english" else _ALEX_BASE
+    return f"{base}\n\nFecha y hora actual: {fecha}"
 
-            if mime_type.startswith("image/"):
-                return {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": b64}}
-            if mime_type == "application/pdf":
-                return {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}}
-            # text files — include as plain text block
-            try:
-                text_content = data.decode("utf-8", errors="replace")
-                return {"type": "text", "text": f"[Archivo: {filename}]\n\n{text_content}"}
-            except Exception:
-                return None
+
+def _last_user_text(request: ChatRequest) -> str:
+    for message in reversed(request.messages):
+        if message.role == "user":
+            return message.content.strip()
+    return ""
+
+
+def _route_mode(request: ChatRequest) -> str:
+    if request.mode != "auto":
+        return request.mode
+    text = _last_user_text(request).lower()
+
+    english_markers = (
+        "english coach", "inglés", "ingles", "cómo digo", "como digo", "translate to english",
+        "corrige mi inglés", "corrige mi ingles", "practiquemos inglés", "practice english",
+    )
+    if any(marker in text for marker in english_markers):
+        return "english"
+
+    admin_markers = (
+        "vps", "docker", "deploy", "desplieg", "servidor", "systemctl", "journalctl",
+        "reinicia", "logs del servidor", "contenedor",
+    )
+    if any(marker in text for marker in admin_markers):
+        return "admin"
+
+    newsflow_markers = (
+        "newsflow", "newsletter", "inside life", "social_posts", "publish_queue",
+        "artículos curados", "articulos curados",
+    )
+    if any(marker in text for marker in newsflow_markers):
+        return "newsflow"
+
+    communication_markers = (
+        "email", "correo", "gmail", "telegram", "mensaje a ", "escribe a ",
+        "respóndele", "respondele", "contesta a ",
+    )
+    if any(marker in text for marker in communication_markers):
+        return "communications"
+
+    return "general"
+
+
+def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
+    settings = get_settings()
+    if mode == "english":
+        return settings.english_model, "low"
+
+    text = _last_user_text(request).lower()
+    complex_markers = (
+        "debug", "refactor", "arquitectura", "analiza a fondo", "investiga a fondo",
+        "revisa el código", "revisa el codigo", "diseña", "diseña una arquitectura",
+    )
+    is_complex = mode == "admin" or len(text) > 2500 or any(x in text for x in complex_markers)
+    if is_complex:
+        return settings.alex_complex_model, "medium"
+    return settings.alex_model, "low"
+
+
+def _profile_for_mode(mode: str) -> str:
+    if mode in {"admin", "newsflow", "communications"}:
+        return mode
+    return "general"
+
+
+def _find_upload(file_id: str) -> str | None:
+    uploads_dir = "/data/uploads"
+    if not os.path.isdir(uploads_dir):
+        return None
+    for fname in os.listdir(uploads_dir):
+        if fname.startswith(f"{file_id}_"):
+            return os.path.join(uploads_dir, fname)
     return None
 
 
-async def _generate_groq(request: ChatRequest):
-    from config import get_groq_client_and_model
-    from groq_compat import to_openai_tools
+def _build_file_content(file_id: str, filename: str, mime_type: str) -> dict | None:
+    path = _find_upload(file_id)
+    if not path:
+        return None
+    with open(path, "rb") as f:
+        data = f.read()
 
-    client, model = get_groq_client_and_model()
-    tools = to_openai_tools(get_tool_definitions())
-    messages = [{"role": "system", "content": _build_system()}]
-    for m in request.messages:
-        messages.append({"role": m.role, "content": m.content})
+    if mime_type.startswith("image/"):
+        b64 = base64.b64encode(data).decode()
+        return {"type": "input_image", "image_url": f"data:{mime_type};base64,{b64}"}
 
-    while True:
-        stream = await client.chat.completions.create(
+    if mime_type == "application/pdf":
+        b64 = base64.b64encode(data).decode()
+        return {
+            "type": "input_file",
+            "filename": filename,
+            "file_data": f"data:application/pdf;base64,{b64}",
+        }
+
+    try:
+        text = data.decode("utf-8", errors="replace")
+        return {"type": "input_text", "text": f"[Archivo: {filename}]\n\n{text}"}
+    except Exception:
+        return None
+
+
+def _build_input(request: ChatRequest) -> list[dict]:
+    # El cliente puede enviar más historial, pero el servidor impone un máximo razonable.
+    messages = request.messages[-16:]
+    result: list[dict] = []
+    for i, message in enumerate(messages):
+        role = message.role if message.role in {"user", "assistant"} else "user"
+        is_last = i == len(messages) - 1
+        if (
+            role == "user" and is_last and request.file_id and request.mime_type
+        ):
+            file_content = _build_file_content(
+                request.file_id,
+                request.filename or "archivo",
+                request.mime_type,
+            )
+            content = []
+            if file_content:
+                content.append(file_content)
+            content.append({"type": "input_text", "text": message.content or "Analiza el archivo adjunto."})
+            result.append({"role": "user", "content": content})
+        else:
+            result.append({"role": role, "content": message.content})
+    return result
+
+
+def _serialize_output_items(response) -> list[dict]:
+    items = []
+    for item in response.output:
+        if hasattr(item, "model_dump"):
+            items.append(item.model_dump(exclude_none=True))
+    return items
+
+
+def _usage_dict(response) -> dict:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return {}
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump(exclude_none=True)
+    return {}
+
+
+def _write_usage(model: str, mode: str, profile: str, elapsed: float, response) -> None:
+    try:
+        os.makedirs(os.path.dirname(_USAGE_FILE), exist_ok=True)
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "model": model,
+            "mode": mode,
+            "tool_profile": profile,
+            "elapsed_ms": round(elapsed * 1000),
+            "usage": _usage_dict(response),
+        }
+        with open(_USAGE_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+async def _run_openai(request: ChatRequest):
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY no está configurada")
+
+    mode = _route_mode(request)
+    profile = _profile_for_mode(mode)
+    model, reasoning_effort = _select_model(request, mode)
+    tools = [] if mode == "english" else get_profile_tools(profile)
+    input_items = _build_input(request)
+    client = get_openai_client()
+    started = time.monotonic()
+    final_response = None
+
+    # Un máximo evita bucles de herramientas accidentales.
+    for _ in range(8):
+        response = await client.responses.create(
             model=model,
-            max_tokens=4096,
-            messages=messages,
+            instructions=_build_instructions(mode),
+            input=input_items,
             tools=tools,
-            stream=True,
+            tool_choice="auto" if tools else "none",
+            reasoning={"effort": reasoning_effort},
+            max_output_tokens=4096,
+            store=False,
         )
+        final_response = response
 
-        text_parts: list[str] = []
-        tool_calls: dict[int, dict] = {}
-        finish_reason = None
-
-        async for chunk in stream:
-            choice = chunk.choices[0]
-            if choice.finish_reason:
-                finish_reason = choice.finish_reason
-            delta = choice.delta
-            if delta.content:
-                text_parts.append(delta.content)
-                yield f"data: {json.dumps({'type': 'text', 'content': delta.content})}\n\n"
-            if delta.tool_calls:
-                for tc in delta.tool_calls:
-                    entry = tool_calls.setdefault(tc.index, {"id": None, "name": "", "arguments": "", "started": False})
-                    if tc.id:
-                        entry["id"] = tc.id
-                    if tc.function and tc.function.name:
-                        entry["name"] += tc.function.name
-                        if not entry["started"]:
-                            entry["started"] = True
-                            yield f"data: {json.dumps({'type': 'tool_start', 'name': entry['name']})}\n\n"
-                    if tc.function and tc.function.arguments:
-                        entry["arguments"] += tc.function.arguments
-
-        if finish_reason != "tool_calls" or not tool_calls:
-            messages.append({"role": "assistant", "content": "".join(text_parts)})
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+        if not calls:
+            text = response.output_text or ""
+            if text:
+                yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
             break
 
-        assistant_tool_calls = [
-            {"id": e["id"], "type": "function", "function": {"name": e["name"], "arguments": e["arguments"]}}
-            for e in tool_calls.values()
-        ]
-        messages.append({
-            "role": "assistant",
-            "content": "".join(text_parts) or None,
-            "tool_calls": assistant_tool_calls,
-        })
+        # Al gestionar el contexto manualmente hay que reenviar los output items,
+        # incluidos reasoning items, antes de los resultados de las funciones.
+        input_items.extend(_serialize_output_items(response))
 
-        for e in tool_calls.values():
+        for call in calls:
+            name = call.name
+            yield f"data: {json.dumps({'type': 'tool_start', 'name': name}, ensure_ascii=False)}\n\n"
             try:
-                args = json.loads(e["arguments"]) if e["arguments"] else {}
-                result = await execute_tool(e["name"], args)
-                result_str = json.dumps(result) if not isinstance(result, str) else result
-            except Exception as ex:
-                result_str = f"Error ejecutando {e['name']}: {ex}"
-            yield f"data: {json.dumps({'type': 'tool_done', 'name': e['name']})}\n\n"
-            messages.append({"role": "tool", "tool_call_id": e["id"], "content": result_str})
+                args = json.loads(call.arguments or "{}")
+                result = await execute_tool(name, args)
+                result_str = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
+            except Exception as exc:
+                result_str = f"Error ejecutando {name}: {exc}"
+            yield f"data: {json.dumps({'type': 'tool_done', 'name': name}, ensure_ascii=False)}\n\n"
+            input_items.append({
+                "type": "function_call_output",
+                "call_id": call.call_id,
+                "output": result_str,
+            })
+    else:
+        raise RuntimeError("Se alcanzó el máximo de iteraciones de herramientas")
+
+    if final_response is not None:
+        _write_usage(model, mode, profile, time.monotonic() - started, final_response)
+    yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model})}\n\n"
 
 
 @router.post("/chat")
 async def chat(request: ChatRequest, _: str = Depends(verify_token)):
-    settings = get_settings()
-
     async def generate():
         try:
-            if settings.model_provider == "groq" and settings.groq_api_key:
-                async for chunk in _generate_groq(request):
-                    yield chunk
-                return
-
-            client, model = get_ai_client_and_model()
-            tools = get_tool_definitions()
-            messages = []
-
-            for i, m in enumerate(request.messages):
-                # Attach file to last user message
-                if (m.role == "user" and i == len(request.messages) - 1
-                        and request.file_id and request.mime_type):
-                    file_block = _load_file_block(
-                        request.file_id, request.filename or "archivo", request.mime_type
-                    )
-                    if file_block:
-                        content = [file_block, {"type": "text", "text": m.content}]
-                        messages.append({"role": "user", "content": content})
-                        continue
-                messages.append({"role": m.role, "content": m.content})
-
-            while True:
-                async with client.messages.stream(
-                    model=model,
-                    max_tokens=4096,
-                    system=_build_system(),
-                    messages=messages,
-                    tools=tools,
-                ) as stream:
-                    async for event in stream:
-                        etype = getattr(event, "type", None)
-                        if etype == "content_block_start":
-                            block = getattr(event, "content_block", None)
-                            if block and getattr(block, "type", None) == "tool_use":
-                                yield f"data: {json.dumps({'type': 'tool_start', 'name': block.name})}\n\n"
-                        elif etype == "content_block_delta":
-                            delta = getattr(event, "delta", None)
-                            if delta and getattr(delta, "type", None) == "text_delta":
-                                yield f"data: {json.dumps({'type': 'text', 'content': delta.text})}\n\n"
-                    message = await stream.get_final_message()
-
-                stop_reason = message.stop_reason
-                messages.append({
-                    "role": "assistant",
-                    "content": [_block_to_dict(b) for b in message.content],
-                })
-
-                if stop_reason != "tool_use":
-                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                    break
-
-                tool_results = []
-                for block in message.content:
-                    if getattr(block, "type", None) != "tool_use":
-                        continue
-                    try:
-                        result = await execute_tool(block.name, block.input)
-                        result_str = json.dumps(result) if not isinstance(result, str) else result
-                    except Exception as e:
-                        result_str = f"Error ejecutando {block.name}: {e}"
-                    yield f"data: {json.dumps({'type': 'tool_done', 'name': block.name})}\n\n"
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": result_str,
-                    })
-                messages.append({"role": "user", "content": tool_results})
-
-        except anthropic.APIStatusError as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': e.message})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            async for chunk in _run_openai(request):
+                yield chunk
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         generate(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
-
-
-def _block_to_dict(block) -> dict:
-    if block.type == "text":
-        return {"type": "text", "text": block.text}
-    if block.type == "tool_use":
-        return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
-    return {"type": block.type}

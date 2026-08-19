@@ -1,7 +1,9 @@
 from functools import lru_cache
 from typing import Optional
+
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+from openai import AsyncOpenAI
 
 
 class GmailAccount(BaseModel):
@@ -10,38 +12,23 @@ class GmailAccount(BaseModel):
     password: str  # App Password de Google
 
 
-class WhatsAppContact(BaseModel):
-    name: str
-    phone: str  # número completo con código de país, ej: 34612345678
-
-
 class Settings(BaseSettings):
     auth_secret: str = "change-me-please"
     auth_username: str = "jorge"
     auth_password: str = "change-me-please"
 
-    anthropic_api_key: Optional[str] = None
-    anthropic_model: str = "claude-haiku-4-5-20251001"
-
-    model_provider: str = "anthropic"  # "anthropic" | "glm" | "groq"
-    glm_api_key: Optional[str] = None
-    glm_model: str = "glm-5.2"
-    glm_base_url: str = "https://api.z.ai/api/anthropic"
-
-    groq_api_key: Optional[str] = None
-    groq_model: str = "llama-3.3-70b-versatile"
-    groq_base_url: str = "https://api.groq.com/openai/v1"
+    # OpenAI — motor único de Alex
+    openai_api_key: Optional[str] = None
+    alex_model: str = "gpt-5.6-luna"
+    alex_complex_model: str = "gpt-5.6-terra"
+    english_model: str = "gpt-5.6-luna"
+    transcription_model: str = "gpt-4o-mini-transcribe"
+    user_timezone: str = "Europe/Madrid"
 
     workspace_path: str = "/opt/openclaw/workspace"
     debug: bool = False
 
     gmail_accounts: list[GmailAccount] = []
-
-    waha_url: str = "http://waha:3000"
-    waha_session: str = "default"
-    waha_api_key: Optional[str] = None
-    whatsapp_contacts: list[WhatsAppContact] = []
-    tts_voice: str = "es-ES-AlvaroNeural"
 
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
@@ -50,7 +37,9 @@ class Settings(BaseSettings):
     supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Allow a VPS .env to retain keys from retired providers during migration.
+    # OpenClaw does not read or use them.
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache
@@ -58,21 +47,6 @@ def get_settings() -> Settings:
     return Settings()
 
 
-def get_ai_client_and_model():
-    """Devuelve (cliente AsyncAnthropic, nombre del modelo) para los proveedores compatibles
-    con la API de Anthropic (anthropic, glm). Para "groq" usa get_groq_client_and_model()."""
-    import anthropic
-
+def get_openai_client() -> AsyncOpenAI:
     s = get_settings()
-    if s.model_provider == "glm" and s.glm_api_key:
-        return anthropic.AsyncAnthropic(api_key=s.glm_api_key, base_url=s.glm_base_url), s.glm_model
-    return anthropic.AsyncAnthropic(api_key=s.anthropic_api_key), s.anthropic_model
-
-
-def get_groq_client_and_model():
-    """Devuelve (cliente AsyncOpenAI, nombre del modelo) para Groq, que expone una API
-    compatible con OpenAI en lugar de la API de Messages de Anthropic."""
-    from openai import AsyncOpenAI
-
-    s = get_settings()
-    return AsyncOpenAI(api_key=s.groq_api_key, base_url=s.groq_base_url), s.groq_model
+    return AsyncOpenAI(api_key=s.openai_api_key)

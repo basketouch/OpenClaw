@@ -21,20 +21,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    depends_on:
-      - openwa
-    networks:
-      - default
-      - n8n-infra
-
-  openwa:
-    build: ./openwa
-    container_name: openwa
-    restart: unless-stopped
-    environment:
-      - PORT=2785
-    volumes:
-      - openwa_data:/app/.sessions
     networks:
       - default
       - n8n-infra
@@ -47,4 +33,3 @@ networks:
 volumes:
   openclaw_workspace:
   openclaw_data:
-  openwa_data:

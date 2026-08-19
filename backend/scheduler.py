@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -18,7 +18,7 @@ _JOBS_FILE = "/data/scheduler_jobs.json"
 
 def _load_jobs() -> list[dict]:
     try:
-        with open(_JOBS_FILE) as f:
+        with open(_JOBS_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return []
@@ -26,102 +26,76 @@ def _load_jobs() -> list[dict]:
 
 def _save_jobs(jobs: list[dict]):
     os.makedirs(os.path.dirname(_JOBS_FILE), exist_ok=True)
-    with open(_JOBS_FILE, "w") as f:
+    with open(_JOBS_FILE, "w", encoding="utf-8") as f:
         json.dump(jobs, f, indent=2, ensure_ascii=False, default=str)
+
+
+def _timezone_name() -> str:
+    from config import get_settings
+    name = get_settings().user_timezone
+    try:
+        pytz.timezone(name)
+        return name
+    except pytz.exceptions.UnknownTimeZoneError:
+        return "Europe/Madrid"
 
 
 def _make_trigger(schedule_type: str, params: dict):
     if schedule_type == "cron":
-        return CronTrigger(**params, timezone="Europe/Madrid")
+        return CronTrigger(**params, timezone=_timezone_name())
     if schedule_type == "interval":
         return IntervalTrigger(**params)
     raise ValueError(f"Tipo de schedule desconocido: {schedule_type}")
 
 
-async def _run_job_anthropic(system: str, prompt: str) -> str:
-    from tools.registry import execute_tool, get_tool_definitions
-    from config import get_ai_client_and_model
-
-    client, model = get_ai_client_and_model()
-    messages = [{"role": "user", "content": prompt}]
-    final_text = "Tarea ejecutada."
-
-    for _ in range(10):
-        resp = await client.messages.create(
-            model=model,
-            max_tokens=4096,
-            system=system,
-            tools=get_tool_definitions(),
-            messages=messages,
-        )
-
-        if resp.stop_reason == "end_turn":
-            final_text = next(
-                (b.text[:140] for b in resp.content if hasattr(b, "text") and b.text),
-                "Tarea ejecutada.",
-            )
-            break
-
-        if resp.stop_reason == "tool_use":
-            results = []
-            for block in resp.content:
-                if block.type == "tool_use":
-                    out = await execute_tool(block.name, block.input)
-                    results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(out, ensure_ascii=False, default=str),
-                    })
-            messages.append({"role": "assistant", "content": resp.content})
-            messages.append({"role": "user", "content": results})
-        else:
-            break
-
-    return final_text
+def _serialize_output_items(response) -> list[dict]:
+    return [
+        item.model_dump(exclude_none=True)
+        for item in response.output
+        if hasattr(item, "model_dump")
+    ]
 
 
-async def _run_job_groq(system: str, prompt: str) -> str:
-    from tools.registry import execute_tool, get_tool_definitions
-    from config import get_groq_client_and_model
-    from groq_compat import to_openai_tools
+async def _run_job_openai(system: str, prompt: str) -> str:
+    from config import get_openai_client, get_settings
+    from tools.registry import execute_tool, get_openai_tool_definitions
 
-    client, model = get_groq_client_and_model()
-    tools = to_openai_tools(get_tool_definitions())
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt}]
-    final_text = "Tarea ejecutada."
+    settings = get_settings()
+    client = get_openai_client()
+    tools = get_openai_tool_definitions()
+    input_items: list[dict] = [{"role": "user", "content": prompt}]
 
-    for _ in range(10):
-        resp = await client.chat.completions.create(
-            model=model,
-            max_tokens=4096,
-            messages=messages,
+    for _ in range(8):
+        response = await client.responses.create(
+            model=settings.alex_model,
+            instructions=system,
+            input=input_items,
             tools=tools,
+            tool_choice="auto",
+            reasoning={"effort": "low"},
+            max_output_tokens=4096,
+            store=False,
         )
-        choice = resp.choices[0]
-        msg = choice.message
 
-        if choice.finish_reason != "tool_calls" or not msg.tool_calls:
-            final_text = (msg.content or "Tarea ejecutada.")[:140]
-            break
+        calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
+        if not calls:
+            return (response.output_text or "Tarea ejecutada.")[:500]
 
-        messages.append({
-            "role": "assistant",
-            "content": msg.content,
-            "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
-        })
-        for tc in msg.tool_calls:
+        input_items.extend(_serialize_output_items(response))
+        for call in calls:
             try:
-                args = json.loads(tc.function.arguments) if tc.function.arguments else {}
-                out = await execute_tool(tc.function.name, args)
-            except Exception as e:
-                out = f"Error: {e}"
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": json.dumps(out, ensure_ascii=False, default=str),
+                args = json.loads(call.arguments or "{}")
+                out = await execute_tool(call.name, args)
+                output = out if isinstance(out, str) else json.dumps(out, ensure_ascii=False, default=str)
+            except Exception as exc:
+                output = f"Error ejecutando {call.name}: {exc}"
+            input_items.append({
+                "type": "function_call_output",
+                "call_id": call.call_id,
+                "output": output,
             })
 
-    return final_text
+    return "La tarea alcanzó el máximo de pasos permitidos."
 
 
 async def _run_job(job_id: str, name: str, prompt: str):
@@ -129,39 +103,32 @@ async def _run_job(job_id: str, name: str, prompt: str):
 
     log.info("Scheduler: ejecutando tarea '%s' (%s)", name, job_id)
     settings = get_settings()
-
-    if settings.model_provider == "groq":
-        if not settings.groq_api_key:
-            log.error("Scheduler: no hay GROQ_API_KEY configurada")
-            return
-    elif not settings.anthropic_api_key and not (settings.model_provider == "glm" and settings.glm_api_key):
-        log.error("Scheduler: no hay API key configurada")
+    if not settings.openai_api_key:
+        log.error("Scheduler: OPENAI_API_KEY no está configurada")
         return
 
-    from datetime import timezone as _utc
-    now = datetime.now(_utc.utc).astimezone(pytz.timezone("Europe/Madrid")).strftime("%A, %d de %B de %Y, %H:%M")
+    tz_name = _timezone_name()
+    now = datetime.now(timezone.utc).astimezone(pytz.timezone(tz_name)).strftime("%A, %d de %B de %Y, %H:%M")
     system = (
-        f"Eres Alex, asistente operativo de Jorge. Ahora son las {now} (hora Madrid).\n"
-        "Estás ejecutando una tarea programada de forma autónoma. "
-        "Completa la tarea directamente con las herramientas disponibles sin pedir confirmación."
+        f"Eres Alex, asistente operativo de Jorge. Ahora son las {now} ({tz_name}).\n"
+        "Estás ejecutando una tarea programada. Completa la tarea directamente con las herramientas disponibles. "
+        "No inventes resultados de herramientas. No ejecutes acciones destructivas de servidor salvo que la tarea "
+        "programada las solicite de forma explícita."
     )
 
-    if settings.model_provider == "groq":
-        final_text = await _run_job_groq(system, prompt)
-    else:
-        final_text = await _run_job_anthropic(system, prompt)
-
+    final_text = await _run_job_openai(system, prompt)
     log.info("Scheduler: tarea '%s' completada", name)
+
     try:
         import push
         await asyncio.to_thread(push.send_notification, f"✓ {name}", final_text)
-    except Exception as e:
-        log.warning("Push notification failed: %s", e)
+    except Exception as exc:
+        log.warning("Push notification failed: %s", exc)
     try:
         from tools.telegram_tool import send_telegram
         await send_telegram(f"<b>✓ {name}</b>\n{final_text}")
-    except Exception as e:
-        log.warning("Telegram notification failed: %s", e)
+    except Exception as exc:
+        log.warning("Telegram notification failed: %s", exc)
 
 
 def _reload_jobs():
@@ -183,8 +150,8 @@ def _reload_jobs():
                 misfire_grace_time=300,
             )
             log.info("Scheduler: cargada tarea '%s'", jd["name"])
-        except Exception as e:
-            log.error("Scheduler: error al cargar tarea %s: %s", jd["id"], e)
+        except Exception as exc:
+            log.error("Scheduler: error al cargar tarea %s: %s", jd["id"], exc)
 
 
 def start():
@@ -198,10 +165,8 @@ def stop():
         _scheduler.shutdown(wait=False)
 
 
-# ─── API pública para las tools ──────────────────────────────────────────────
-
 def create_job(name: str, prompt: str, schedule_type: str, schedule_params: dict) -> dict:
-    _make_trigger(schedule_type, schedule_params)  # valida antes de guardar
+    _make_trigger(schedule_type, schedule_params)
     job = {
         "id": str(uuid.uuid4())[:8],
         "name": name,
@@ -221,8 +186,8 @@ def create_job(name: str, prompt: str, schedule_type: str, schedule_params: dict
 def list_jobs() -> list[dict]:
     jobs = _load_jobs()
     running = {j.id for j in _scheduler.get_jobs()}
-    for j in jobs:
-        j["active"] = f"uj_{j['id']}" in running
+    for job in jobs:
+        job["active"] = f"uj_{job['id']}" in running
     return jobs
 
 
@@ -238,9 +203,9 @@ def delete_job(job_id: str) -> bool:
 
 def toggle_job(job_id: str, enabled: bool) -> bool:
     jobs = _load_jobs()
-    for j in jobs:
-        if j["id"] == job_id:
-            j["enabled"] = enabled
+    for job in jobs:
+        if job["id"] == job_id:
+            job["enabled"] = enabled
             _save_jobs(jobs)
             _reload_jobs()
             return True
