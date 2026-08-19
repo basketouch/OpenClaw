@@ -37,7 +37,9 @@ class Settings(BaseSettings):
     supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # Allow a VPS .env to retain keys from retired providers during migration.
+    # OpenClaw does not read or use them.
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache
