@@ -42,6 +42,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
         "web_search", "list_scheduled_tasks", "create_scheduled_task",
         "delete_scheduled_task", "toggle_scheduled_task",
+        "search_notion", "read_notion_page", "create_notion_page",
     },
     "communications": {
         "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
@@ -57,6 +58,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
     "english": {
         "get_datetime", "save_english_phrase", "search_english_phrases", "get_english_review",
         "record_english_result", "get_english_progress",
+        "search_notion", "read_notion_page", "create_notion_page",
     },
 }
 
@@ -95,6 +97,10 @@ from tools.english_tool import (
     save_english_phrase, search_english_phrases, get_english_review,
     record_english_result, get_english_progress,
 )
+from tools.notion_tool import (
+    SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
+    search_notion, read_notion_page, create_notion_page,
+)
 
 register("get_datetime", get_datetime, DATETIME_DEF)
 register("list_workspace_files", list_workspace_files, LIST_DEF)
@@ -122,3 +128,6 @@ register("search_english_phrases", search_english_phrases, EN_SEARCH_DEF)
 register("get_english_review", get_english_review, EN_REVIEW_DEF)
 register("record_english_result", record_english_result, EN_RESULT_DEF)
 register("get_english_progress", get_english_progress, EN_PROGRESS_DEF)
+register("search_notion", search_notion, NOTION_SEARCH_DEF)
+register("read_notion_page", read_notion_page, NOTION_READ_DEF)
+register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)

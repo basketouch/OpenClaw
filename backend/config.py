@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     english_supabase_service_key: Optional[str] = None
     english_supabase_user_id: Optional[str] = None
 
+    # Notion (server-side internal connection; never expose the token to the browser)
+    notion_api_key: Optional[str] = None
+    notion_english_data_source_id: Optional[str] = None
+
     # Allow a VPS .env to retain keys from retired providers during migration.
     # OpenClaw does not read or use them.
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
