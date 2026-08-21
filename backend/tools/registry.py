@@ -43,6 +43,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "web_search", "list_scheduled_tasks", "create_scheduled_task",
         "delete_scheduled_task", "toggle_scheduled_task",
         "search_notion", "read_notion_page", "create_notion_page",
+        "query_notion_actions", "upsert_notion_action",
     },
     "communications": {
         "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
@@ -99,7 +100,8 @@ from tools.english_tool import (
 )
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
-    search_notion, read_notion_page, create_notion_page,
+    QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
+    search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
 )
 
 register("get_datetime", get_datetime, DATETIME_DEF)
@@ -131,3 +133,5 @@ register("get_english_progress", get_english_progress, EN_PROGRESS_DEF)
 register("search_notion", search_notion, NOTION_SEARCH_DEF)
 register("read_notion_page", read_notion_page, NOTION_READ_DEF)
 register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)
+register("query_notion_actions", query_notion_actions, NOTION_QUERY_ACTIONS_DEF)
+register("upsert_notion_action", upsert_notion_action, NOTION_UPSERT_ACTION_DEF)

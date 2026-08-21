@@ -1,3 +1,5 @@
+import re
+from datetime import date
 from typing import Any
 
 import httpx
@@ -101,6 +103,142 @@ async def create_notion_page(parent_page_id: str, title: str, content: str = "")
     return {"ok": True, "page": _page_summary(page)}
 
 
+def _actions_data_source_id() -> str:
+    value = get_settings().notion_actions_data_source_id
+    if not value:
+        raise RuntimeError("Notion Acciones no está configurado: falta NOTION_ACTIONS_DATA_SOURCE_ID")
+    return value
+
+
+def _property_text(property_value: dict | None) -> str:
+    property_value = property_value or {}
+    prop_type = property_value.get("type")
+    if prop_type in {"title", "rich_text"}:
+        return _plain_text(property_value.get(prop_type))
+    if prop_type == "select":
+        return (property_value.get("select") or {}).get("name", "")
+    if prop_type == "url":
+        return property_value.get("url") or ""
+    if prop_type == "date":
+        return (property_value.get("date") or {}).get("start", "")
+    return ""
+
+
+def _action_summary(page: dict) -> dict:
+    props = page.get("properties") or {}
+    return {
+        "id": page.get("id"),
+        "url": page.get("url"),
+        "action": _property_text(props.get("Acción")),
+        "project": _property_text(props.get("Proyecto")),
+        "status": _property_text(props.get("Estado")),
+        "priority": _property_text(props.get("Prioridad")),
+        "week": _property_text(props.get("Semana")),
+        "expected_result": _property_text(props.get("Resultado esperado")),
+        "next_step": _property_text(props.get("Próximo paso")),
+        "blocker": _property_text(props.get("Bloqueo")),
+        "context": _property_text(props.get("Contexto")),
+    }
+
+
+def _norm(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+async def _query_actions(page_size: int = 100) -> list[dict]:
+    result = await _request("POST", f"/data_sources/{_actions_data_source_id()}/query", {
+        "page_size": max(1, min(100, page_size)),
+    })
+    return result.get("results", [])
+
+
+async def query_notion_actions(query: str = "", status: str = "", limit: int = 20) -> dict:
+    actions = [_action_summary(page) for page in await _query_actions()]
+    needle = _norm(query)
+    if needle:
+        actions = [item for item in actions if needle in _norm(" ".join([
+            item["action"], item["project"], item["expected_result"], item["next_step"], item["blocker"],
+        ]))]
+    if status:
+        actions = [item for item in actions if item["status"].lower() == status.lower()]
+    return {"count": len(actions[:max(1, min(100, limit))]), "items": actions[:max(1, min(100, limit))]}
+
+
+def _rich_text(value: str) -> list[dict]:
+    return [{"type": "text", "text": {"content": value}}] if value else []
+
+
+def _action_properties(
+    action: str, project: str, status: str, priority: str, week: str,
+    expected_result: str, next_step: str, blocker: str, context: str,
+) -> dict[str, Any]:
+    values: dict[str, Any] = {"Acción": {"title": _rich_text(action)}}
+    if project:
+        values["Proyecto"] = {"select": {"name": project}}
+    if status:
+        values["Estado"] = {"select": {"name": status}}
+    if priority:
+        values["Prioridad"] = {"select": {"name": priority}}
+    if week:
+        values["Semana"] = {"date": {"start": week}}
+    if expected_result:
+        values["Resultado esperado"] = {"rich_text": _rich_text(expected_result)}
+    if next_step:
+        values["Próximo paso"] = {"rich_text": _rich_text(next_step)}
+    if blocker:
+        values["Bloqueo"] = {"rich_text": _rich_text(blocker)}
+    if context:
+        values["Contexto"] = {"url": context}
+    return values
+
+
+async def upsert_notion_action(
+    action: str,
+    project: str = "",
+    status: str = "Inbox",
+    priority: str = "Media",
+    week: str = "",
+    expected_result: str = "",
+    next_step: str = "",
+    blocker: str = "",
+    context: str = "",
+) -> dict:
+    """Create an action or update an exact duplicate; never creates a sixth weekly action."""
+    action = action.strip()
+    if not action:
+        return {"ok": False, "error": "action vacía"}
+    if status not in {"Inbox", "Esta semana", "En curso", "Bloqueado", "Hecho", "Descartado"}:
+        return {"ok": False, "error": "estado no válido"}
+    if priority and priority not in {"Alta", "Media", "Baja"}:
+        return {"ok": False, "error": "prioridad no válida"}
+    if project and project not in {"DrawSports", "CutSports", "The Analyst", "Basketouch Hub"}:
+        return {"ok": False, "error": "proyecto no válido"}
+    if week:
+        try:
+            date.fromisoformat(week)
+        except ValueError:
+            return {"ok": False, "error": "week debe tener formato AAAA-MM-DD"}
+
+    pages = await _query_actions()
+    items = [_action_summary(page) for page in pages]
+    exact = next((item for item in items if _norm(item["action"]) == _norm(action)), None)
+    properties = _action_properties(action, project, status, priority, week, expected_result, next_step, blocker, context)
+    if exact:
+        page = await _request("PATCH", f"/pages/{exact['id']}", {"properties": properties})
+        return {"ok": True, "created": False, "item": _action_summary(page)}
+
+    if status == "Esta semana":
+        weekly = [item for item in items if item["status"] == "Esta semana"]
+        if len(weekly) >= 5:
+            return {"ok": False, "error": "límite semanal alcanzado: ya hay 5 acciones en Esta semana", "weekly_actions": weekly}
+
+    page = await _request("POST", "/pages", {
+        "parent": {"type": "data_source_id", "data_source_id": _actions_data_source_id()},
+        "properties": properties,
+    })
+    return {"ok": True, "created": True, "item": _action_summary(page)}
+
+
 SEARCH_DEF = {
     "name": "search_notion",
     "description": "Busca páginas y bases de datos en el Notion compartido con Alex. Úsala antes de afirmar que un dato no existe en Notion.",
@@ -117,4 +255,16 @@ CREATE_PAGE_DEF = {
     "name": "create_notion_page",
     "description": "Crea una página hija en Notion. Confirma con Jorge antes de crearla salvo que él haya pedido claramente crear esa página concreta.",
     "input_schema": {"type": "object", "properties": {"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}}, "required": ["parent_page_id", "title"]},
+}
+
+QUERY_ACTIONS_DEF = {
+    "name": "query_notion_actions",
+    "description": "Consulta la base central Acciones de Notion para localizar trabajo existente y evitar duplicados.",
+    "input_schema": {"type": "object", "properties": {"query": {"type": "string"}, "status": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": []},
+}
+
+UPSERT_ACTION_DEF = {
+    "name": "upsert_notion_action",
+    "description": "Crea una acción en la base central Acciones o actualiza una existente con el mismo título. Aplica automáticamente el límite de cinco acciones en Esta semana y nunca borra acciones.",
+    "input_schema": {"type": "object", "properties": {"action": {"type": "string"}, "project": {"type": "string", "enum": ["DrawSports", "CutSports", "The Analyst", "Basketouch Hub"]}, "status": {"type": "string", "enum": ["Inbox", "Esta semana", "En curso", "Bloqueado", "Hecho", "Descartado"]}, "priority": {"type": "string", "enum": ["Alta", "Media", "Baja"]}, "week": {"type": "string", "description": "Fecha de inicio de semana AAAA-MM-DD"}, "expected_result": {"type": "string"}, "next_step": {"type": "string"}, "blocker": {"type": "string"}, "context": {"type": "string", "description": "URL de Notion relacionada"}}, "required": ["action"]},
 }
