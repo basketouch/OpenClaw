@@ -226,7 +226,7 @@ async def search_english_phrases(query: str = "", category: str = "", status: st
     _, _, user_id = config
     params = {
         "select": "*",
-        "user_id": f"eq.{user_id}",
+        "or": f"(user_id.is.null,user_id.eq.{user_id})",
         "status": "eq.approved",
         "order": "created_at.desc",
         "limit": str(max(1, min(100, limit))),
@@ -394,7 +394,7 @@ SAVE_DEF = {
 
 SEARCH_DEF = {
     "name": "search_english_phrases",
-    "description": "Busca frases personales guardadas en English Coach. El resultado incluye count e items; si count es mayor que 0, muestra esos items al usuario.",
+    "description": "Busca la biblioteca compartida y las frases personales guardadas en English Coach. El resultado incluye count e items; si count es mayor que 0, muestra esos items al usuario.",
     "input_schema": {"type": "object", "properties": {"query": {"type": "string"}, "category": {"type": "string"}, "status": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": []},
 }
 
