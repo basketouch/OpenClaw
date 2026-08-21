@@ -234,6 +234,14 @@ async def search_english_phrases(query: str = "", category: str = "", status: st
     if category:
         params["category"] = f"eq.{category}"
     concepts = await _sb_request("GET", "ec_concepts", params=params)
+
+    # The legacy Jorge Lorenzo Coach library groups basketball phrases in
+    # Spanish categories (for example, "Defensa") rather than "Basketball".
+    # Keep an exact match when it exists, then fall back to the shared library.
+    if not concepts and category.strip().lower() in {"basketball", "baloncesto"}:
+        params.pop("category")
+        concepts = await _sb_request("GET", "ec_concepts", params=params)
+
     q = _norm(query)
     if q:
         concepts = [
