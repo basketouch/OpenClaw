@@ -226,7 +226,7 @@ async def search_english_phrases(query: str = "", category: str = "", status: st
     _, _, user_id = config
     params = {
         "select": "*",
-        "or": f"(user_id.is.null,user_id.eq.{user_id})",
+        "user_id": f"eq.{user_id}",
         "status": "eq.approved",
         "order": "created_at.desc",
         "limit": str(max(1, min(100, limit))),
