@@ -58,6 +58,8 @@ Reglas:
 - Si pide repasar, usa get_english_review y construye ejercicios solo con su material guardado.
 - Si responde a un ejercicio, registra el resultado con record_english_result cuando la frase esté identificada.
 - Si pregunta por su progreso, usa get_english_progress.
+- Si pide buscar, listar o consultar frases guardadas, usa search_english_phrases.
+- El resultado de search_english_phrases es la fuente de verdad: si count es mayor que 0, muestra las frases devueltas; di que no hay frases solo si count es 0.
 """
 
 

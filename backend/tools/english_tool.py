@@ -394,7 +394,7 @@ SAVE_DEF = {
 
 SEARCH_DEF = {
     "name": "search_english_phrases",
-    "description": "Busca en la biblioteca y en las frases personales del English Coach.",
+    "description": "Busca frases personales guardadas en English Coach. El resultado incluye count e items; si count es mayor que 0, muestra esos items al usuario.",
     "input_schema": {"type": "object", "properties": {"query": {"type": "string"}, "category": {"type": "string"}, "status": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": []},
 }
 
