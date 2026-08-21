@@ -236,7 +236,15 @@ async def search_english_phrases(query: str = "", category: str = "", status: st
     concepts = await _sb_request("GET", "ec_concepts", params=params)
     q = _norm(query)
     if q:
-        concepts = [c for c in concepts if q in _norm(" ".join([c.get("en", ""), c.get("es", ""), c.get("context", ""), c.get("note", "")]))]
+        concepts = [
+            c for c in concepts
+            if q in _norm(" ".join([
+                c.get("en") or "",
+                c.get("es") or "",
+                c.get("context") or "",
+                c.get("note") or "",
+            ]))
+        ]
 
     ids = [c["id"] for c in concepts]
     progress_by_id: dict[str, dict] = {}
