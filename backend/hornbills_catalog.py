@@ -6,6 +6,7 @@ HORNIBLLS_DESTINATIONS = {
     "scouting": {"name": "Games & Scouting", "when": "Opponent, game plan, game preparation or post-game review.", "rule": "One record per game/opponent; update it as the stage advances."},
     "staff": {"name": "Staff Notes & Decisions", "when": "Staff proposal, meeting note or confirmed technical decision.", "rule": "Use questions only when ready to discuss with staff."},
     "private_note": {"name": "Private Coach Notes", "when": "Unconfirmed observation, question for head coach, sensitive reflection, idea or learning.", "rule": "Default for early-stage observations; preserve uncertainty."},
+    "players": {"name": "Players", "when": "Stable player profile, role, strength or development focus.", "rule": "Read first and update only after Jorge confirms the information is stable; use Private Coach Notes for an initial evaluation."},
     "calendar": {"name": "Technical Calendar", "when": "A dated practice, game, meeting, trip or deadline.", "rule": "Only create with a concrete date."},
     "document": {"name": "Document Library", "when": "Game plan, practice document, PDF, presentation, template or resource.", "rule": "Store or link the document; do not duplicate analysis/scouting text."},
 }
