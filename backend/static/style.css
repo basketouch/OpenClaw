@@ -131,6 +131,10 @@ html, body {
 }
 .chat-item:hover .chat-item-del { display: block; }
 .chat-item-del:hover { color: var(--err); }
+.context-shortcuts { margin: 4px 0 16px 42px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 640px; }
+.context-shortcuts-label { width: 100%; color: var(--muted); font-size: 11px; margin-bottom: 1px; }
+.context-shortcut { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 6px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.context-shortcut:hover { border-color: var(--accent); background: rgba(124,58,237,.1); }
 .sidebar-toggle { display: none; }
 .sidebar-overlay { display: none; }
 .scope-button { border: 0; padding: 0; background: transparent; cursor: pointer; font-family: var(--font); }

@@ -301,25 +301,8 @@ function resize(el) {
 
 function onKey(e) {
   if (e.key !== 'Enter' || e.shiftKey) return;
-  var ta = e.target;
-  var pos = ta.selectionStart;
-  var text = ta.value;
-  var lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-  var line = text.substring(lineStart, pos);
-  var m = line.match(/^(\d+)\.\s/);
-  if (!m) return;
-  if (line.trim() === m[0].trim()) {
-    e.preventDefault();
-    ta.value = text.substring(0, lineStart) + text.substring(pos);
-    ta.selectionStart = ta.selectionEnd = lineStart;
-    resize(ta);
-    return;
-  }
   e.preventDefault();
-  var next = '\n' + (parseInt(m[1]) + 1) + '. ';
-  ta.value = text.substring(0, pos) + next + text.substring(pos);
-  ta.selectionStart = ta.selectionEnd = pos + next.length;
-  resize(ta);
+  sendMessage();
 }
 
 // ─── File upload ─────────────────────────────────────────────────────────────
@@ -375,6 +358,7 @@ async function sendMessage() {
   if (welcome) welcome.remove();
 
   history.push({ role: 'user', content: msgText });
+  document.querySelectorAll('.context-shortcuts').forEach(el => el.remove());
   appendUserMsg(msgText, true, pendingFile);
 
   const filePayload = pendingFile ? Object.assign({}, pendingFile) : null;
@@ -451,6 +435,7 @@ async function sendMessage() {
     if (responseText) {
       history.push({ role: 'assistant', content: responseText });
       await saveCurrentChat();
+      renderContextShortcuts(msgText, responseText);
     }
 
   } catch (err) {
@@ -461,6 +446,34 @@ async function sendMessage() {
     setDisabled(false);
     setStatus('ready');
   }
+}
+
+function renderContextShortcuts(userText, responseText) {
+  if (currentScope.workspace_id !== 'hornbills') return;
+  if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
+  const isQuestion = /\?|césar|cesar|pregunt/i.test(userText);
+  const actions = isQuestion ? [
+    ['💬 Pregunta para César', 'Guarda esta pregunta como una nota privada para César, con estado pendiente de revisar.'],
+    ['📊 Convertir en análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
+    ['🔒 Guardar hipótesis', 'Guarda esta observación como hipótesis pendiente de validar en Private Coach Notes.'],
+    ['🤝 Llevar a staff', 'Convierte esto en una propuesta para discutir con el staff.'],
+  ] : [
+    ['📊 Guardar análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
+    ['🔒 Guardar hipótesis', 'Guarda esta observación como hipótesis pendiente de validar en Private Coach Notes.'],
+    ['💬 Pregunta para César', 'Formula y guarda la pregunta pendiente para César como nota privada.'],
+    ['🤝 Llevar a staff', 'Convierte esto en una propuesta para discutir con el staff.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">¿Qué hacemos con esto?</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
 }
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
