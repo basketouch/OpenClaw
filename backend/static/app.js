@@ -121,6 +121,7 @@ function renderChatList() {
         <span class="chat-item-date">${date}</span>
       </div>
       ${c.preview ? `<div class="chat-item-preview">${esc(c.preview)}</div>` : ''}
+      <button class="chat-item-edit" onclick="renameChat(event,'${c.id}')" title="Editar nombre">✎</button>
       <button class="chat-item-del" onclick="deleteChat(event,'${c.id}')" title="Eliminar">✕</button>
     </div>`;
   };
@@ -218,6 +219,28 @@ async function deleteChat(e, id) {
     else await startNewChat();
   } else {
     renderChatList();
+  }
+}
+
+async function renameChat(e, id) {
+  e.stopPropagation();
+  const chat = chatList.find(c => c.id === id);
+  const currentTitle = chat ? chat.title : '';
+  const title = window.prompt('Nombre de la conversación', currentTitle);
+  if (title === null) return;
+  const cleanTitle = title.trim();
+  if (!cleanTitle) return;
+  try {
+    const r = await fetch(`/api/chats/${id}/title`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: cleanTitle }),
+    });
+    if (!r.ok) throw new Error('No se pudo cambiar el nombre');
+    chatList = chatList.map(c => c.id === id ? { ...c, title: cleanTitle, updated: new Date().toISOString() } : c);
+    renderChatList();
+  } catch (_) {
+    alert('No se pudo cambiar el nombre de la conversación.');
   }
 }
 

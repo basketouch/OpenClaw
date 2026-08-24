@@ -130,7 +130,14 @@ html, body {
   display: none; background: none; border: none; color: var(--muted);
   font-size: 13px; cursor: pointer; padding: 2px 5px; border-radius: 4px;
 }
+.chat-item-edit {
+  position: absolute; right: 30px; top: 8px;
+  display: none; background: none; border: none; color: var(--muted);
+  font-size: 15px; cursor: pointer; padding: 1px 5px; border-radius: 4px;
+}
 .chat-item:hover .chat-item-del { display: block; }
+.chat-item:hover .chat-item-edit { display: block; }
+.chat-item-edit:hover { color: var(--text); }
 .chat-item-del:hover { color: var(--err); }
 .context-shortcuts { margin: 4px 0 16px 42px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 640px; }
 .context-shortcuts-label { width: 100%; color: var(--muted); font-size: 11px; margin-bottom: 1px; }

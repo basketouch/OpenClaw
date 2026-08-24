@@ -147,6 +147,10 @@ class SaveBody(BaseModel):
     scope_source: str | None = None
 
 
+class RenameBody(BaseModel):
+    title: str
+
+
 @router.put("/{cid}")
 async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
     try:
@@ -186,6 +190,26 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
 
     _save(chat)
     return {"success": True, "mode": chat.get("mode", "auto"), "workspace_id": chat["workspace_id"], "project_id": chat.get("project_id")}
+
+
+@router.patch("/{cid}/title")
+async def rename_chat(cid: str, body: RenameBody, _: str = Depends(verify_token)):
+    """Rename a conversation without modifying its messages or scope."""
+    title = body.title.strip()
+    if not title:
+        raise HTTPException(400, "El nombre no puede estar vacío")
+    if len(title) > 120:
+        raise HTTPException(400, "El nombre no puede tener más de 120 caracteres")
+    try:
+        chat = _load(cid)
+    except FileNotFoundError:
+        raise HTTPException(404, "Chat no encontrado")
+
+    chat["title"] = title
+    chat["updated"] = datetime.now(timezone.utc).isoformat()
+    _normalise_scope(chat)
+    _save(chat)
+    return {"success": True, "title": title}
 
 
 @router.delete("/{cid}")
