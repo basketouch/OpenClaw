@@ -44,8 +44,9 @@
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-hdr">
         <span class="sidebar-title">Espacios</span>
-        <button class="btn-icon" onclick="startNewChat()" title="Nueva conversación">⊕</button>
+        <button class="btn-icon" onclick="openNewChatPicker()" title="Nueva conversación">⊕</button>
       </div>
+      <div id="new-chat-picker" class="new-chat-picker hidden"></div>
       <div id="chat-list" class="chat-list">
         <p class="no-chats">Cargando…</p>
       </div>
@@ -151,7 +152,7 @@
   </div>
 </div>
 
-<script src="/app.js?v=26"></script>
+<script src="/app.js?v=27"></script>
 <script src="/mode.js?v=1"></script>
 </body>
 </html>

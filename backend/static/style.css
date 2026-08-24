@@ -95,6 +95,12 @@ html, body {
   padding-top: max(14px, env(safe-area-inset-top));
 }
 .sidebar-title { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+.new-chat-picker { margin: 8px; padding: 7px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); flex-shrink: 0; }
+.new-chat-picker.hidden { display: none; }
+.new-chat-picker-title { color: var(--muted); font-size: 11px; padding: 3px 5px 6px; }
+.new-chat-picker-divider { color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; margin: 7px 5px 3px; }
+.new-chat-picker button { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; border-radius: 7px; padding: 7px; background: transparent; color: var(--text); cursor: pointer; text-align: left; font: inherit; font-size: 12px; }
+.new-chat-picker button:hover { background: var(--surface); }
 .chat-list { flex: 1; overflow-y: auto; padding: 8px; }
 .chat-list::-webkit-scrollbar { width: 3px; }
 .chat-list::-webkit-scrollbar-thumb { background: var(--border); }

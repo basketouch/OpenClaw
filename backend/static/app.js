@@ -141,6 +141,19 @@ function renderChatList() {
   el.innerHTML = (recent.length ? section('Recientes', recent, 'general') : '') + spaces;
 }
 
+function openNewChatPicker() {
+  const el = document.getElementById('new-chat-picker');
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+  const spaces = workspaceList.filter(w => w.id !== 'projects').map(w =>
+    `<button onclick="startNewChat('${w.id}')"><span>${w.icon}</span>${esc(w.name)}</button>`
+  ).join('');
+  const projects = projectList.map(p =>
+    `<button onclick="startNewChat('projects','${p.id}')"><span>🚀</span>${esc(p.name)}</button>`
+  ).join('');
+  el.innerHTML = `<div class="new-chat-picker-title">Nueva conversación en…</div>${spaces}<div class="new-chat-picker-divider">Projects</div>${projects}`;
+  el.classList.remove('hidden');
+}
+
 function fmtDate(iso) {
   const d = new Date(iso);
   const now = new Date();
@@ -155,6 +168,7 @@ async function startNewChat(workspaceId = 'general', projectId = null) {
   // Project buttons pass the project name; resolve it to its stable id.
   const project = projectList.find(p => p.id === projectId || p.name === projectId);
   if (project) { workspaceId = 'projects'; projectId = project.id; }
+  document.getElementById('new-chat-picker').classList.add('hidden');
   try {
     const r = await fetch('/api/chats', {
       method: 'POST',
