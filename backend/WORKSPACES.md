@@ -56,3 +56,23 @@ non-destructive structured note.
 `append_notion_note` never replaces or deletes Notion content. Creating a new
 Notion page and turning a note into a task still require confirmation, so an
 ambiguous conversation cannot silently create structure or work.
+
+## Product project contexts
+
+CutSports and DrawSports use independent restricted tool profiles and safe,
+name-based destination catalogues. The catalogues contain workflow rules and
+Notion destination names only; private Notion identifiers remain deployment
+configuration or are resolved at runtime through search.
+
+For both products, Alex checks the relevant project source before stating that
+something is live or complete. It can read, de-duplicate and create/update
+Backlog records. A release is always a proposal until Jorge explicitly confirms
+publication.
+
+DrawSports uses **Estado del Proyecto** and **Backlog — DrawSports** as the
+operational source of truth. **Pendiente de publicar** holds ready-but-not-live
+work, **Marketing DrawSports** holds campaigns and proposals, and **Versión
+actual en App Store y web** is updated only after a verified publication. Its
+sidebar shortcuts are dynamic: they surface backlog actions for work items,
+release actions for publishing conversations, and marketing actions for copy or
+campaign conversations.

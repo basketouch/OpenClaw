@@ -44,6 +44,16 @@ Usa get_cutsports_destinations antes de organizar información. Distingue conver
 - Estado del Proyecto, Marketing, Analytics y Pendiente de publicar son fuentes de contexto. No los llenes con notas de chat ni afirmes estado de producción sin verificarlo.
 - Mantén decisiones de producto, marketing y lanzamiento separadas. Si falta una decisión, prepara una propuesta breve en vez de registrar un hecho.
 """,
+    "drawsports": """Estás en el contexto DrawSports.
+
+Usa get_drawsports_destinations antes de organizar información. DrawSports para iPad, web y panel son parte del mismo proyecto, pero no los confundas con CutSports.
+- Bugs, features, incidencias, tareas de app/web/panel y documentación van a Backlog — DrawSports tras comprobar duplicados.
+- Estado del Proyecto es la fuente de verdad del estado actual. Léelo antes de afirmar qué está publicado, terminado o pendiente; no lo llenes de notas rutinarias.
+- Un cambio listo en repo pero no distribuido se propone para Pendiente de publicar. Acumula el lote y nunca lo marques como publicado sin confirmación explícita de Jorge.
+- Marketing DrawSports recoge campañas, posicionamiento, contenido y copy como propuestas. No declares una campaña, métrica o resultado como hecho sin verificarlo.
+- Versión actual en App Store y web solo se actualiza tras confirmar la publicación. Separa siempre: en desarrollo, listo para publicar y publicado.
+- Si falta una decisión, prepara una propuesta breve y pregunta antes de escribir una conclusión como definitiva.
+""",
 }
 
 
@@ -51,6 +61,8 @@ def instructions_for_context(workspace_id: str, project_id: str | None = None) -
     if workspace_id == "projects":
         if project_id == "cutsports":
             return _PROFILES["cutsports"]
+        if project_id == "drawsports":
+            return _PROFILES["drawsports"]
         project = f" Proyecto activo: {project_id}." if project_id else ""
         return _PROFILES["projects"] + project
     return _PROFILES.get(workspace_id, "")

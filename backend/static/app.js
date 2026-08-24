@@ -525,6 +525,10 @@ function renderContextShortcuts(userText, responseText) {
     renderCutSportsShortcuts(userText, responseText);
     return;
   }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'drawsports') {
+    renderDrawSportsShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -572,6 +576,39 @@ function renderCutSportsShortcuts(userText, responseText) {
   const el = document.createElement('div');
   el.className = 'context-shortcuts cutsports-shortcuts';
   el.innerHTML = '<span class="context-shortcuts-label">CutSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderDrawSportsShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const marketing = /marketing|campaña|campana|copy|landing|contenido|reel|newsletter|instagram|tiktok|youtube|linkedin|kpi/.test(text);
+  const release = /release|publicar|publicación|publicacion|app store|appstore|build|archive|submit for review|versión|version|tienda/.test(text);
+  const actions = release ? [
+    ['📦 Añadir al lote', 'Comprueba si este cambio ya está en Pendiente de publicar y, si no, prepara una propuesta de ítem para el siguiente lote de DrawSports.'],
+    ['✅ Checklist de publicación', 'Prepara el checklist mínimo para publicar este lote, sin afirmar que ya se ha publicado.'],
+    ['🧭 Contrastar estado', 'Contrasta este cambio con Estado del Proyecto y distingue entre listo en repo, pendiente y publicado.'],
+    ['📝 Preparar notas', 'Redacta un borrador de notas de versión claro para usuarios, en español e inglés si aplica.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de DrawSports: objetivo, audiencia, mensaje, canal y siguiente decisión.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy para DrawSports, centrada en el problema real del entrenador.'],
+    ['📊 Definir medición', 'Propón los KPIs y la forma de medir esta acción sin inventar resultados.'],
+    ['📌 Guardar decisión', 'Si esta propuesta ya está aprobada, resume la decisión, el responsable y el siguiente paso.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — DrawSports con área, prioridad, estado y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y señala qué está verificado, qué falta y qué es propuesta.'],
+    ['📦 Llevar a publicación', 'Si este cambio ya está listo en repo pero aún no está publicado, prepara una propuesta para Pendiente de publicar.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts drawsports-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">DrawSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {

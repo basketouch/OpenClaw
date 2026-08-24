@@ -201,6 +201,8 @@ def _profile_for_mode(mode: str, workspace_id: str = "general", project_id: str 
         return "hornbills"
     if workspace_id == "projects" and project_id == "cutsports":
         return "cutsports"
+    if workspace_id == "projects" and project_id == "drawsports":
+        return "drawsports"
     if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"
