@@ -182,7 +182,6 @@ async function startNewChat(workspaceId = 'general', projectId = null) {
     history = [];
     renderChatList();
     showWelcome();
-    renderChatScope(chat);
     closeSidebar();
     document.getElementById('msg-input').focus();
   } catch (_) {
@@ -200,7 +199,6 @@ async function loadChat(id) {
     history = chat.messages || [];
     currentScope = { workspace_id: chat.workspace_id || 'general', project_id: chat.project_id || null, scope_source: chat.scope_source || 'auto' };
     renderMessages();
-    renderChatScope(chat);
     renderChatList();
     closeSidebar();
     scrollBottom();
@@ -235,35 +233,6 @@ async function saveCurrentChat() {
     chatList = (await r.json()).chats || [];
     renderChatList();
   } catch (_) { /* ignore */ }
-}
-
-function scopeName(scope) {
-  const workspace = workspaceList.find(w => w.id === scope.workspace_id);
-  const project = projectList.find(p => p.id === scope.project_id);
-  return project ? `Projects · ${project.name}` : (workspace ? workspace.name : 'General');
-}
-
-function renderChatScope(chat) {
-  document.getElementById('chat-title-hdr').textContent = scopeName(chat.workspace_id ? chat : currentScope);
-}
-
-function toggleScopePicker() {
-  if (!currentChatId) return;
-  const el = document.getElementById('scope-picker');
-  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
-  const choices = workspaceList.filter(w => w.id !== 'projects').map(w =>
-    `<button onclick="moveCurrentChat('${w.id}', null)">${w.icon} ${esc(w.name)}</button>`
-  ).join('') + projectList.map(p => `<button onclick="moveCurrentChat('projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('');
-  el.innerHTML = `<div class="scope-picker-title">Mover conversación a…</div>${choices}`;
-  el.classList.remove('hidden');
-}
-
-async function moveCurrentChat(workspaceId, projectId) {
-  if (!currentChatId) return;
-  currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
-  await saveCurrentChat();
-  renderChatScope(currentScope);
-  document.getElementById('scope-picker').classList.add('hidden');
 }
 
 function renderMessages() {
@@ -440,7 +409,6 @@ async function sendMessage() {
           bubble.classList.remove('cursor');
           if (ev.workspace_id) {
             currentScope = { workspace_id: ev.workspace_id, project_id: ev.project_id || null, scope_source: currentScope.scope_source };
-            renderChatScope(currentScope);
           }
         } else if (ev.type === 'error') {
           bubble.classList.remove('cursor');

@@ -114,11 +114,6 @@ html, body {
 .space-section.project .chat-item { padding: 7px 9px; }
 .space-section.project .chat-item-preview { display: none; }
 .space-empty { color: var(--muted); font-size: 11px; padding: 3px 10px 7px; }
-.scope-picker { border-top: 1px solid var(--border); padding: 10px; max-height: 42vh; overflow-y: auto; flex-shrink: 0; }
-.scope-picker.hidden { display: none; }
-.scope-picker-title { color: var(--muted); font-size: 11px; margin: 0 2px 7px; }
-.scope-picker button { display: block; width: 100%; text-align: left; border: 0; border-radius: 7px; background: transparent; color: var(--text); padding: 7px 8px; cursor: pointer; font: inherit; font-size: 12px; }
-.scope-picker button:hover { background: var(--bg); }
 .no-chats { font-size: 13px; color: var(--muted); text-align: center; padding: 20px 8px; }
 .chat-item {
   position: relative; padding: 10px 12px; border-radius: 10px; cursor: pointer;
@@ -143,8 +138,6 @@ html, body {
 .context-shortcut:hover { border-color: var(--accent); background: rgba(124,58,237,.1); }
 .sidebar-toggle { display: none; }
 .sidebar-overlay { display: none; }
-.scope-button { border: 0; padding: 0; background: transparent; cursor: pointer; font-family: var(--font); }
-.scope-button:hover { color: var(--text); }
 
 /* ── Header ── */
 header {
