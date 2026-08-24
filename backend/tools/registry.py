@@ -65,6 +65,10 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub", "get_hornbills_destinations",
         "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
     },
+    "cutsports": {
+        "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
+        "create_notion_database_record", "update_notion_database_record", "get_cutsports_destinations",
+    },
 }
 
 
@@ -83,6 +87,7 @@ from tools.email_tool import (
     send_email, reply_email, list_email_accounts,
 )
 from hornbills_catalog import DESTINATIONS_DEF, get_hornbills_destinations
+from cutsports_catalog import DESTINATIONS_DEF as CUTSPORTS_DESTINATIONS_DEF, get_cutsports_destinations
 from tools.admin_tool import SHELL_DEF, HOST_SHELL_DEF, run_shell, run_host_shell
 from tools.telegram_tool import SEND_TELEGRAM_DEF, send_telegram
 from tools.supabase_tool import (
@@ -143,6 +148,7 @@ register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)
 register("get_hornbills_hub", get_hornbills_hub, HORNBILLS_HUB_DEF)
 register("append_notion_note", append_notion_note, APPEND_NOTE_DEF)
 register("get_hornbills_destinations", get_hornbills_destinations, DESTINATIONS_DEF)
+register("get_cutsports_destinations", get_cutsports_destinations, CUTSPORTS_DESTINATIONS_DEF)
 register("read_notion_data_source", read_notion_data_source, READ_DATA_SOURCE_DEF)
 register("create_notion_database_record", create_notion_database_record, CREATE_DATABASE_RECORD_DEF)
 register("update_notion_database_record", update_notion_database_record, UPDATE_DATABASE_RECORD_DEF)

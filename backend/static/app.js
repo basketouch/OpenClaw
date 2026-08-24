@@ -521,6 +521,10 @@ function renderContextShortcuts(userText, responseText) {
     renderEnglishShortcuts(userText, responseText);
     return;
   }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'cutsports') {
+    renderCutSportsShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -534,6 +538,45 @@ function renderContextShortcuts(userText, responseText) {
   el.addEventListener('click', e => {
     const prompt = e.target.dataset.prompt;
     if (prompt) prefill(prompt, e.target.dataset.assist || null);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderCutSportsShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const crm = /lead|cliente|club|entrenador|coach|contacto|email|demo|piloto|licencia/.test(text);
+  const marketing = /marketing|campaña|campana|beta|copy|landing|contenido|reel|newsletter/.test(text);
+  const release = /release|publicar|publicación|publicacion|build|appcast|web|dmg/.test(text);
+  const actions = crm ? [
+    ['👤 Registrar en CRM', 'Confirma que este contacto es un lead real y crea o actualiza el registro correspondiente en CRM — CutSports.'],
+    ['📆 Definir próximo paso', 'Define el próximo paso y fecha de seguimiento para este lead, sin inventar información de contacto.'],
+    ['✉️ Preparar mensaje', 'Redacta un mensaje breve y personalizado para este contacto.'],
+    ['🔍 Revisar historial', 'Busca si ya existe este contacto o una oportunidad relacionada antes de crear nada.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de CutSports: objetivo, audiencia, mensaje y siguiente decisión.'],
+    ['🧪 Llevar a BETA', 'Define cómo validar esta idea con los usuarios BETA antes de ejecutarla.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy para esta idea con tono CutSports.'],
+    ['📌 Guardar decisión', 'Si esta propuesta ya está aprobada, resume la decisión y el siguiente paso de ejecución.'],
+  ] : release ? [
+    ['📦 Preparar publicación', 'Convierte esto en una propuesta de nota para Pendiente de publicar, sin registrar una publicación como hecha.'],
+    ['✅ Checklist de release', 'Prepara un checklist de verificación antes de publicar web o build Mac.'],
+    ['🧭 Contrastar estado', 'Contrasta esta afirmación con Estado del Proyecto antes de darla por válida.'],
+    ['📝 Crear backlog', 'Si hay trabajo pendiente para este release, crea o actualiza el ítem correspondiente en Backlog — CutSports.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — CutSports con área, prioridad y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y señala qué está verificado y qué es propuesta.'],
+    ['📣 Convertir en propuesta', 'Estructura esto como una propuesta breve de producto o marketing, sin registrarla como hecho todavía.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts cutsports-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">CutSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
   });
   document.getElementById('messages').appendChild(el);
   scrollBottom();

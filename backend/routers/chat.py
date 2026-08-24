@@ -194,11 +194,13 @@ def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
     return settings.alex_model, "low"
 
 
-def _profile_for_mode(mode: str) -> str:
+def _profile_for_mode(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
     # Hornbills uses its own restricted Notion capture profile while retaining
     # the general response style and model.
     if mode == "hornbills":
         return "hornbills"
+    if workspace_id == "projects" and project_id == "cutsports":
+        return "cutsports"
     if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"
@@ -306,7 +308,7 @@ async def _run_openai(request: ChatRequest):
     mode = _route_mode(request)
     if workspace_id == "hornbills" and mode == "general":
         mode = "hornbills"
-    profile = _profile_for_mode(mode)
+    profile = _profile_for_mode(mode, workspace_id, project_id)
     model, reasoning_effort = _select_model(request, mode)
     tools = get_profile_tools(profile)
     input_items = _build_input(request)

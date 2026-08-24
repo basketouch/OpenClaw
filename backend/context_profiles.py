@@ -36,11 +36,21 @@ Flujo:
 - Para frases nuevas, separa traducción literal, versión natural y cuándo usarla.
 """,
     "projects": """Trabaja dentro del proyecto activo. Antes de usar Notion, localiza el espacio o página del proyecto y conserva los datos, decisiones y acciones separados de otros proyectos.""",
+    "cutsports": """Estás en el contexto CutSports.
+
+Usa get_cutsports_destinations antes de organizar información. Distingue conversación, propuesta y dato operativo:
+- Bugs, features y trabajo técnico van a Backlog — CutSports tras comprobar duplicados.
+- Leads, clubes y entrenadores solo entran en CRM — CutSports cuando Jorge lo confirme explícitamente; nunca por una mención casual.
+- Estado del Proyecto, Marketing, Analytics y Pendiente de publicar son fuentes de contexto. No los llenes con notas de chat ni afirmes estado de producción sin verificarlo.
+- Mantén decisiones de producto, marketing y lanzamiento separadas. Si falta una decisión, prepara una propuesta breve en vez de registrar un hecho.
+""",
 }
 
 
 def instructions_for_context(workspace_id: str, project_id: str | None = None) -> str:
     if workspace_id == "projects":
+        if project_id == "cutsports":
+            return _PROFILES["cutsports"]
         project = f" Proyecto activo: {project_id}." if project_id else ""
         return _PROFILES["projects"] + project
     return _PROFILES.get(workspace_id, "")
