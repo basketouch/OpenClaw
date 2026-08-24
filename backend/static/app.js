@@ -499,6 +499,10 @@ function hornbillsActions(intent) {
 }
 
 function renderContextShortcuts(userText, responseText) {
+  if (currentScope.workspace_id === 'english') {
+    renderEnglishShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -507,6 +511,34 @@ function renderContextShortcuts(userText, responseText) {
   const el = document.createElement('div');
   el.className = 'context-shortcuts';
   el.innerHTML = `<span class="context-shortcuts-label">${labels[intent]} · ¿Qué hacemos con esto?</span>` + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderEnglishShortcuts(userText, responseText) {
+  if (/guardad[oa]|saved|frase guardada/i.test(responseText)) return;
+  const text = (userText + ' ' + responseText).toLowerCase();
+  const isPractice = /practic|role play|conversation|conversaci[oó]n|ensay/.test(text);
+  const actions = isPractice ? [
+    ['🎭 Seguir practicando', 'Sigamos el role play con una situación un poco más exigente.'],
+    ['📝 Corregir lo importante', 'Corrige solo mis errores de mayor impacto y dame la versión natural para decir en voz alta.'],
+    ['💾 Guardar frase útil', 'Guarda la frase más reutilizable de este ejercicio en mi English Coach.'],
+    ['🔁 Repasar', 'Ponme un repaso breve con frases que tenga pendientes.'],
+  ] : [
+    ['💾 Guardar frase útil', 'Guarda la frase más reutilizable que acabamos de trabajar en mi English Coach.'],
+    ['🗣️ Practicarla', 'Hazme practicar esta frase en un role play corto y realista.'],
+    ['📝 Explicar matiz', 'Explícame brevemente el matiz entre la traducción literal y la versión natural.'],
+    ['🔁 Repasar', 'Ponme un repaso breve con frases que tenga pendientes.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts english-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">English Coach · siguiente paso</span>' + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {
