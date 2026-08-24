@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     notion_api_key: Optional[str] = None
     notion_english_data_source_id: Optional[str] = None
     notion_actions_data_source_id: Optional[str] = None
+    notion_hornbills_hub_page_id: Optional[str] = None
 
     # Allow a VPS .env to retain keys from retired providers during migration.
     # OpenClaw does not read or use them.

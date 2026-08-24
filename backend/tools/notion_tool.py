@@ -103,6 +103,33 @@ async def create_notion_page(parent_page_id: str, title: str, content: str = "")
     return {"ok": True, "page": _page_summary(page)}
 
 
+async def get_hornbills_hub() -> dict:
+    """Return the configured Hornbills hub, or locate its shared Notion page."""
+    configured_id = get_settings().notion_hornbills_hub_page_id
+    if configured_id:
+        page = await _request("GET", f"/pages/{configured_id}")
+        return {"ok": True, "configured": True, "page": _page_summary(page)}
+    result = await search_notion("Technical Area — Bogor Hornbills", limit=10)
+    exact = next((item for item in result["items"] if item["title"].lower() == "technical area — bogor hornbills".lower()), None)
+    return {"ok": bool(exact), "configured": False, "page": exact, "matches": result["items"]}
+
+
+async def append_notion_note(page_id: str, content: str) -> dict:
+    """Append a dated, non-destructive note to an existing shared Notion page."""
+    content = content.strip()
+    if not content:
+        return {"ok": False, "error": "contenido vacío"}
+    paragraphs = [part.strip() for part in content.split("\n\n") if part.strip()]
+    children = [
+        {"object": "block", "type": "paragraph", "paragraph": {
+            "rich_text": [{"type": "text", "text": {"content": paragraph[:2000]}}]
+        }}
+        for paragraph in paragraphs[:100]
+    ]
+    result = await _request("PATCH", f"/blocks/{page_id}/children", {"children": children})
+    return {"ok": True, "appended": len(children), "page_id": page_id, "result": result}
+
+
 def _actions_data_source_id() -> str:
     value = get_settings().notion_actions_data_source_id
     if not value:
@@ -255,6 +282,18 @@ CREATE_PAGE_DEF = {
     "name": "create_notion_page",
     "description": "Crea una página hija en Notion. Confirma con Jorge antes de crearla salvo que él haya pedido claramente crear esa página concreta.",
     "input_schema": {"type": "object", "properties": {"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}}, "required": ["parent_page_id", "title"]},
+}
+
+HORNBILLS_HUB_DEF = {
+    "name": "get_hornbills_hub",
+    "description": "Localiza el hub compartido de Notion 'Technical Area — Bogor Hornbills'. Usa primero este resultado para leer o clasificar una sesión técnica.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
+APPEND_NOTE_DEF = {
+    "name": "append_notion_note",
+    "description": "Añade una nota nueva a una página existente de Notion sin sobrescribir nada. Úsala solo al cerrar una sesión o cuando Jorge pida guardar/resumir; lee la página antes para evitar duplicados.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "content": {"type": "string", "description": "Nota concisa, estructurada y sin datos inventados."}}, "required": ["page_id", "content"]},
 }
 
 QUERY_ACTIONS_DEF = {

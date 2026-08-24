@@ -61,6 +61,10 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "record_english_result", "get_english_progress",
         "search_notion", "read_notion_page", "create_notion_page",
     },
+    "hornbills": {
+        "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub",
+        "append_notion_note", "create_notion_page", "query_notion_actions",
+    },
 }
 
 
@@ -101,7 +105,9 @@ from tools.english_tool import (
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
+    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
+    get_hornbills_hub, append_notion_note,
 )
 
 register("get_datetime", get_datetime, DATETIME_DEF)
@@ -133,5 +139,7 @@ register("get_english_progress", get_english_progress, EN_PROGRESS_DEF)
 register("search_notion", search_notion, NOTION_SEARCH_DEF)
 register("read_notion_page", read_notion_page, NOTION_READ_DEF)
 register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)
+register("get_hornbills_hub", get_hornbills_hub, HORNBILLS_HUB_DEF)
+register("append_notion_note", append_notion_note, APPEND_NOTE_DEF)
 register("query_notion_actions", query_notion_actions, NOTION_QUERY_ACTIONS_DEF)
 register("upsert_notion_action", upsert_notion_action, NOTION_UPSERT_ACTION_DEF)

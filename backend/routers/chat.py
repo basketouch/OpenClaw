@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from auth import verify_token
 from config import get_openai_client, get_settings
+from context_profiles import instructions_for_context
 from tools.registry import execute_tool, get_profile_tools
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -94,10 +95,11 @@ def _build_instructions(mode: str, workspace_id: str = "general", project_id: st
     now = datetime.now(timezone.utc).astimezone(tz)
     fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} ({tz.zone})"
     base = _ENGLISH_BASE if mode == "english" else _ALEX_BASE
-    # Hook only: workspace-specific memory/instructions/tools can be injected
-    # here later without coupling that policy to the sidebar representation.
+    # Context policy lives outside the visual workspace catalogue. It is the
+    # extension point for scoped instructions, memory retrieval and tools.
     scope = f"workspace={workspace_id}" + (f", project={project_id}" if project_id else "")
-    return f"{base}\n\nContexto de trabajo activo: {scope}\nFecha y hora actual: {fecha}"
+    context_instructions = instructions_for_context(workspace_id, project_id)
+    return f"{base}\n\nContexto de trabajo activo: {scope}\n{context_instructions}\nFecha y hora actual: {fecha}"
 
 
 def _last_user_text(request: ChatRequest) -> str:
@@ -190,6 +192,10 @@ def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
 
 
 def _profile_for_mode(mode: str) -> str:
+    # Hornbills uses its own restricted Notion capture profile while retaining
+    # the general response style and model.
+    if mode == "hornbills":
+        return "hornbills"
     if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"
@@ -295,6 +301,8 @@ async def _run_openai(request: ChatRequest):
     workspace_id, project_id = _route_scope(request)
     request.workspace_id, request.project_id = workspace_id, project_id
     mode = _route_mode(request)
+    if workspace_id == "hornbills":
+        mode = "hornbills"
     profile = _profile_for_mode(mode)
     model, reasoning_effort = _select_model(request, mode)
     tools = get_profile_tools(profile)
