@@ -84,3 +84,10 @@ Proyecto** is verified before it is cited as live status. Prospects,
 ambassadors, social-calendar entries and testimonials require explicit approval
 before Alex creates a record; testimonial authorisation always requires clear
 consent.
+
+Comunidad keeps **Estado del Proyecto** as the verified source of truth and
+**Backlog — Comunidad** for future work. **Marketing Comunidad** holds the
+editorial system and funnel, while **Pendiente de publicar** is reserved for
+prepared pieces with a defined channel and publishing action. Alex preserves
+the distinction between Public, Comunidad, Laboratorio and VIP, and reads the
+product or pricing source before it presents the current offer as fact.

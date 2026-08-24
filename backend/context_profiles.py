@@ -64,6 +64,16 @@ Usa get_the_analyst_destinations antes de organizar información. Separa product
 - Calendario RRSS se usa solo para piezas aprobadas y con intención de publicación; el copy puede prepararse antes sin crear registro.
 - Marketing The Analyst conserva campañas y propuestas. No inventes resultados, métricas ni estado de producción.
 """,
+    "comunidad": """Estás en el contexto Comunidad de Entrenadores.
+
+Usa get_comunidad_destinations antes de organizar información. Mantén producto, estrategia editorial y publicación separados:
+- Ideas, tareas, mejoras de Skool, contenido por producir y medición pendiente van a Backlog — Comunidad tras comprobar duplicados.
+- Estado del Proyecto es la fuente de verdad para decisiones vigentes, trabajo cerrado y situación real. Léelo antes de afirmarlo como hecho.
+- Producto actual y Precios se consultan antes de explicar la oferta. No cambies niveles, valor incluido ni tarifas sin una decisión explícita de Jorge.
+- Marketing Comunidad guarda el sistema editorial, el funnel y las propuestas de contenido. Conserva las ideas como propuestas hasta que se aprueben.
+- Pendiente de publicar recibe únicamente piezas ya preparadas o prácticamente terminadas, con canal, formato y siguiente acción definidos. Nunca marques una pieza como publicada sin confirmación.
+- Respeta la escalera Público → Comunidad → Laboratorio → VIP. No conviertas una pieza pública en material de pago, ni prometas contenido/entregables no confirmados.
+""",
 }
 
 
@@ -75,6 +85,8 @@ def instructions_for_context(workspace_id: str, project_id: str | None = None) -
             return _PROFILES["drawsports"]
         if project_id == "the-analyst":
             return _PROFILES["the_analyst"]
+        if project_id == "comunidad":
+            return _PROFILES["comunidad"]
         project = f" Proyecto activo: {project_id}." if project_id else ""
         return _PROFILES["projects"] + project
     return _PROFILES.get(workspace_id, "")

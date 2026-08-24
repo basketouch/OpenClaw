@@ -533,6 +533,10 @@ function renderContextShortcuts(userText, responseText) {
     renderTheAnalystShortcuts(userText, responseText);
     return;
   }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'comunidad') {
+    renderComunidadShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -646,6 +650,39 @@ function renderTheAnalystShortcuts(userText, responseText) {
   const el = document.createElement('div');
   el.className = 'context-shortcuts analyst-shortcuts';
   el.innerHTML = '<span class="context-shortcuts-label">The Analyst · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderComunidadShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const publishing = /publicar|publicación|publicacion|reel|youtube|instagram|newsletter|pieza lista|ya está preparado|ya esta preparado/.test(text);
+  const strategy = /marketing|funnel|campaña|campana|copy|contenido|laboratorio|vip|skool|precio|oferta|entregable|público|publico/.test(text);
+  const actions = publishing ? [
+    ['📦 Revisar si está lista', 'Comprueba si esta pieza ya tiene contenido, canal, formato y siguiente acción de publicación definidos.'],
+    ['📝 Preparar publicación', 'Si ya está preparada, conviértela en una propuesta para Pendiente de publicar sin marcarla como publicada.'],
+    ['✍️ Ajustar copy', 'Revisa el copy para que deje claro el valor para el entrenador y la siguiente acción.'],
+    ['📊 Definir medición', 'Define qué métrica y enlace o UTM permitirían evaluar esta publicación.'],
+  ] : strategy ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea para Marketing Comunidad: objetivo, audiencia, nivel de la escalera de valor, canal y siguiente decisión.'],
+    ['🧭 Definir frontera', 'Aclara qué parte corresponde a contenido público, Comunidad, Laboratorio o VIP y por qué.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy clara para entrenadores, sin prometer entregables no confirmados.'],
+    ['🎯 Llevar al backlog', 'Si falta trabajo para ejecutar esta idea, crea o actualiza un ítem en Backlog — Comunidad con área y prioridad.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — Comunidad con área, prioridad, estado y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y distingue lo verificado de lo propuesto.'],
+    ['📣 Convertir en propuesta', 'Estructura esto como una propuesta de producto, contenido o marketing sin registrarla como decisión cerrada.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts comunidad-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">Comunidad · siguiente paso</span>' + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {
