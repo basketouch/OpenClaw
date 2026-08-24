@@ -147,12 +147,13 @@ async def read_notion_data_source(data_source_id: str) -> dict:
     }
 
 
-def _database_properties(schema: dict[str, str], title: str, fields: dict[str, str]) -> dict:
+def _database_properties(schema: dict[str, str], title: str | None, fields: dict[str, Any]) -> dict:
     result: dict[str, Any] = {}
     title_name = next((name for name, kind in schema.items() if kind == "title"), None)
-    if not title_name:
+    if title is not None and not title_name:
         raise RuntimeError("La base de datos no tiene una propiedad de título")
-    result[title_name] = {"title": _rich_text(title)}
+    if title is not None:
+        result[title_name] = {"title": _rich_text(title)}
     for name, value in fields.items():
         kind = schema.get(name)
         if not kind or value in (None, "") or kind == "title":
@@ -169,11 +170,15 @@ def _database_properties(schema: dict[str, str], title: str, fields: dict[str, s
             result[name] = {"url": str(value)}
         elif kind == "checkbox":
             result[name] = {"checkbox": str(value).lower() in {"true", "1", "sí", "si", "yes"}}
+        elif kind == "number":
+            result[name] = {"number": float(value)}
+        elif kind == "relation" and isinstance(value, list):
+            result[name] = {"relation": [{"id": str(item)} for item in value]}
     return result
 
 
 async def create_notion_database_record(
-    data_source_id: str, title: str, content: str = "", fields: dict[str, str] | None = None,
+    data_source_id: str, title: str, content: str = "", fields: dict[str, Any] | None = None,
 ) -> dict:
     """Create a new Notion database record using only fields in its live schema."""
     title = title.strip()
@@ -190,6 +195,18 @@ async def create_notion_database_record(
         "children": children,
     })
     return {"ok": True, "page": _page_summary(page)}
+
+
+async def update_notion_database_record(page_id: str, fields: dict[str, Any]) -> dict:
+    """Update known properties of an existing database record; never changes content."""
+    page = await _request("GET", f"/pages/{page_id}")
+    data_source_id = (page.get("parent") or {}).get("data_source_id")
+    if not data_source_id:
+        return {"ok": False, "error": "la página no pertenece a una base de datos"}
+    data_source = await _request("GET", f"/data_sources/{data_source_id}")
+    properties = _database_properties(_data_source_schema(data_source), None, fields)
+    updated = await _request("PATCH", f"/pages/{page_id}", {"properties": properties})
+    return {"ok": True, "page": _page_summary(updated)}
 
 
 def _actions_data_source_id() -> str:
@@ -368,6 +385,12 @@ CREATE_DATABASE_RECORD_DEF = {
     "name": "create_notion_database_record",
     "description": "Crea un registro nuevo dentro de una base de datos compartida de Notion. Solo guarda propiedades presentes en su esquema y nunca actualiza ni borra registros existentes.",
     "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["data_source_id", "title"]},
+}
+
+UPDATE_DATABASE_RECORD_DEF = {
+    "name": "update_notion_database_record",
+    "description": "Actualiza propiedades conocidas de un registro existente de una base de datos de Notion. Úsala solo después de leer o localizar el registro; nunca sustituye el contenido de la página.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {}}}, "required": ["page_id", "fields"]},
 }
 
 QUERY_ACTIONS_DEF = {
