@@ -130,6 +130,68 @@ async def append_notion_note(page_id: str, content: str) -> dict:
     return {"ok": True, "appended": len(children), "page_id": page_id, "result": result}
 
 
+def _data_source_schema(data_source: dict) -> dict[str, str]:
+    return {
+        name: value.get("type", "unknown")
+        for name, value in (data_source.get("properties") or {}).items()
+    }
+
+
+async def read_notion_data_source(data_source_id: str) -> dict:
+    """Read a shared Notion data source schema before creating a record."""
+    data_source = await _request("GET", f"/data_sources/{data_source_id}")
+    return {
+        "id": data_source.get("id"),
+        "title": _plain_text(data_source.get("title")) or "Base de datos sin título",
+        "properties": _data_source_schema(data_source),
+    }
+
+
+def _database_properties(schema: dict[str, str], title: str, fields: dict[str, str]) -> dict:
+    result: dict[str, Any] = {}
+    title_name = next((name for name, kind in schema.items() if kind == "title"), None)
+    if not title_name:
+        raise RuntimeError("La base de datos no tiene una propiedad de título")
+    result[title_name] = {"title": _rich_text(title)}
+    for name, value in fields.items():
+        kind = schema.get(name)
+        if not kind or value in (None, "") or kind == "title":
+            continue
+        if kind == "rich_text":
+            result[name] = {"rich_text": _rich_text(str(value))}
+        elif kind in {"select", "status"}:
+            result[name] = {kind: {"name": str(value)}}
+        elif kind == "multi_select":
+            result[name] = {"multi_select": [{"name": item.strip()} for item in str(value).split(",") if item.strip()]}
+        elif kind == "date":
+            result[name] = {"date": {"start": str(value)}}
+        elif kind == "url":
+            result[name] = {"url": str(value)}
+        elif kind == "checkbox":
+            result[name] = {"checkbox": str(value).lower() in {"true", "1", "sí", "si", "yes"}}
+    return result
+
+
+async def create_notion_database_record(
+    data_source_id: str, title: str, content: str = "", fields: dict[str, str] | None = None,
+) -> dict:
+    """Create a new Notion database record using only fields in its live schema."""
+    title = title.strip()
+    if not title:
+        return {"ok": False, "error": "title vacío"}
+    data_source = await _request("GET", f"/data_sources/{data_source_id}")
+    properties = _database_properties(_data_source_schema(data_source), title, fields or {})
+    children = []
+    for paragraph in [part.strip() for part in content.split("\n\n") if part.strip()][:100]:
+        children.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": _rich_text(paragraph[:2000])}})
+    page = await _request("POST", "/pages", {
+        "parent": {"type": "data_source_id", "data_source_id": data_source_id},
+        "properties": properties,
+        "children": children,
+    })
+    return {"ok": True, "page": _page_summary(page)}
+
+
 def _actions_data_source_id() -> str:
     value = get_settings().notion_actions_data_source_id
     if not value:
@@ -294,6 +356,18 @@ APPEND_NOTE_DEF = {
     "name": "append_notion_note",
     "description": "Añade una nota nueva a una página existente de Notion sin sobrescribir nada. Úsala solo al cerrar una sesión o cuando Jorge pida guardar/resumir; lee la página antes para evitar duplicados.",
     "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "content": {"type": "string", "description": "Nota concisa, estructurada y sin datos inventados."}}, "required": ["page_id", "content"]},
+}
+
+READ_DATA_SOURCE_DEF = {
+    "name": "read_notion_data_source",
+    "description": "Lee el esquema real de una base de datos de Notion antes de crear un registro. Úsala después de localizar la base con search_notion.",
+    "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}}, "required": ["data_source_id"]},
+}
+
+CREATE_DATABASE_RECORD_DEF = {
+    "name": "create_notion_database_record",
+    "description": "Crea un registro nuevo dentro de una base de datos compartida de Notion. Solo guarda propiedades presentes en su esquema y nunca actualiza ni borra registros existentes.",
+    "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["data_source_id", "title"]},
 }
 
 QUERY_ACTIONS_DEF = {
