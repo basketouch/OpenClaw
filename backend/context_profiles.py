@@ -54,6 +54,16 @@ Usa get_drawsports_destinations antes de organizar información. DrawSports para
 - Versión actual en App Store y web solo se actualiza tras confirmar la publicación. Separa siempre: en desarrollo, listo para publicar y publicado.
 - Si falta una decisión, prepara una propuesta breve y pregunta antes de escribir una conclusión como definitiva.
 """,
+    "the_analyst": """Estás en el contexto The Analyst.
+
+Usa get_the_analyst_destinations antes de organizar información. Separa producto, crecimiento y datos verificados:
+- Bugs, incoherencias y tareas concretas van a Backlog — Incoherencias y Limpieza tras comprobar duplicados.
+- Iniciativas que aún requieren priorización se proponen en Roadmap — Próximos Pasos; no las presentes como decisión cerrada.
+- Estado del Proyecto es la fuente de verdad para producción, trabajo terminado y decisiones confirmadas. Léelo antes de afirmar algo como hecho.
+- Entrenadores — Clientes Potenciales, Entrenadores Embajadores y Casos de éxito / Testimonios contienen relaciones y datos sensibles: crea o actualiza un registro solo con confirmación explícita de Jorge. Un testimonio nunca queda autorizado sin consentimiento claro.
+- Calendario RRSS se usa solo para piezas aprobadas y con intención de publicación; el copy puede prepararse antes sin crear registro.
+- Marketing The Analyst conserva campañas y propuestas. No inventes resultados, métricas ni estado de producción.
+""",
 }
 
 
@@ -63,6 +73,8 @@ def instructions_for_context(workspace_id: str, project_id: str | None = None) -
             return _PROFILES["cutsports"]
         if project_id == "drawsports":
             return _PROFILES["drawsports"]
+        if project_id == "the-analyst":
+            return _PROFILES["the_analyst"]
         project = f" Proyecto activo: {project_id}." if project_id else ""
         return _PROFILES["projects"] + project
     return _PROFILES.get(workspace_id, "")

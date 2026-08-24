@@ -76,3 +76,11 @@ actual en App Store y web** is updated only after a verified publication. Its
 sidebar shortcuts are dynamic: they surface backlog actions for work items,
 release actions for publishing conversations, and marketing actions for copy or
 campaign conversations.
+
+The Analyst keeps product work separate from commercial relationships:
+**Backlog — Incoherencias y Limpieza** holds concrete issues, **Roadmap —
+Próximos Pasos** holds proposals that need prioritisation, and **Estado del
+Proyecto** is verified before it is cited as live status. Prospects,
+ambassadors, social-calendar entries and testimonials require explicit approval
+before Alex creates a record; testimonial authorisation always requires clear
+consent.

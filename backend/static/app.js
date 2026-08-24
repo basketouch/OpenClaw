@@ -529,6 +529,10 @@ function renderContextShortcuts(userText, responseText) {
     renderDrawSportsShortcuts(userText, responseText);
     return;
   }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'the-analyst') {
+    renderTheAnalystShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -609,6 +613,39 @@ function renderDrawSportsShortcuts(userText, responseText) {
   const el = document.createElement('div');
   el.className = 'context-shortcuts drawsports-shortcuts';
   el.innerHTML = '<span class="context-shortcuts-label">DrawSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderTheAnalystShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const people = /lead|cliente|entrenador|coach|contacto|email|demo|embajador|embajadora|testimonio|caso de éxito|caso de exito/.test(text);
+  const marketing = /marketing|campaña|campana|copy|landing|contenido|reel|newsletter|instagram|youtube|linkedin|lanzamiento|rrss/.test(text);
+  const actions = people ? [
+    ['👤 Revisar contacto', 'Busca si este entrenador o contacto ya existe antes de crear un registro.'],
+    ['🤝 Registrar prospecto', 'Confirma que esta persona es un cliente potencial real y crea o actualiza el registro correspondiente.'],
+    ['🌟 Valorar embajador', 'Evalúa si este contacto encaja como embajador: segmento, audiencia, valor mutuo y próximo paso.'],
+    ['🗣️ Preparar mensaje', 'Redacta un mensaje breve, personalizado y útil para este contacto; no inventes datos.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de The Analyst: objetivo, audiencia, mensaje, canal y siguiente decisión.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy centrada en el problema que resuelve The Analyst para un entrenador.'],
+    ['🗓️ Planificar pieza', 'Si esta pieza ya está aprobada, prepara los datos necesarios para Calendario RRSS: canal, idioma, segmento, fecha y notas.'],
+    ['📊 Definir medición', 'Propón los KPIs de esta acción y cómo medirlos, sin inventar resultados.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza esta incoherencia o tarea en el Backlog de The Analyst.'],
+    ['🗺️ Llevar al roadmap', 'Convierte esta idea en una propuesta priorizable para Roadmap — Próximos Pasos, sin tratarla como decisión cerrada.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y separa lo verificado, lo pendiente y lo propuesto.'],
+    ['✅ Registrar decisión', 'Si esta decisión ya está confirmada, resume el alcance, el motivo y el siguiente paso para actualizar el estado del proyecto.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts analyst-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">The Analyst · siguiente paso</span>' + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {

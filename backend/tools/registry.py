@@ -73,6 +73,10 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_drawsports_destinations",
     },
+    "the_analyst": {
+        "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
+        "create_notion_database_record", "update_notion_database_record", "get_the_analyst_destinations",
+    },
 }
 
 
@@ -93,6 +97,7 @@ from tools.email_tool import (
 from hornbills_catalog import DESTINATIONS_DEF, get_hornbills_destinations
 from cutsports_catalog import DESTINATIONS_DEF as CUTSPORTS_DESTINATIONS_DEF, get_cutsports_destinations
 from drawsports_catalog import DESTINATIONS_DEF as DRAWSPORTS_DESTINATIONS_DEF, get_drawsports_destinations
+from the_analyst_catalog import DESTINATIONS_DEF as THE_ANALYST_DESTINATIONS_DEF, get_the_analyst_destinations
 from tools.admin_tool import SHELL_DEF, HOST_SHELL_DEF, run_shell, run_host_shell
 from tools.telegram_tool import SEND_TELEGRAM_DEF, send_telegram
 from tools.supabase_tool import (
@@ -155,6 +160,7 @@ register("append_notion_note", append_notion_note, APPEND_NOTE_DEF)
 register("get_hornbills_destinations", get_hornbills_destinations, DESTINATIONS_DEF)
 register("get_cutsports_destinations", get_cutsports_destinations, CUTSPORTS_DESTINATIONS_DEF)
 register("get_drawsports_destinations", get_drawsports_destinations, DRAWSPORTS_DESTINATIONS_DEF)
+register("get_the_analyst_destinations", get_the_analyst_destinations, THE_ANALYST_DESTINATIONS_DEF)
 register("read_notion_data_source", read_notion_data_source, READ_DATA_SOURCE_DEF)
 register("create_notion_database_record", create_notion_database_record, CREATE_DATABASE_RECORD_DEF)
 register("update_notion_database_record", update_notion_database_record, UPDATE_DATABASE_RECORD_DEF)
