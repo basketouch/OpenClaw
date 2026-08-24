@@ -86,12 +86,18 @@ function closeSidebar() {
 // ─── Chat list ───────────────────────────────────────────────────────────────
 
 let chatList = [];
+let workspaceList = [];
+let projectList = [];
+let currentScope = { workspace_id: 'general', project_id: null, scope_source: 'auto' };
+const recentLimit = 5;
 
 async function loadChatList() {
   try {
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     const data = await r.json();
     chatList = data.chats || [];
+    workspaceList = data.workspaces || [];
+    projectList = data.projects || [];
     renderChatList();
     if (chatList.length > 0) {
       await loadChat(chatList[0].id);
@@ -105,11 +111,7 @@ async function loadChatList() {
 
 function renderChatList() {
   const el = document.getElementById('chat-list');
-  if (!chatList.length) {
-    el.innerHTML = '<p class="no-chats">Sin conversaciones</p>';
-    return;
-  }
-  el.innerHTML = chatList.map(c => {
+  const chat = c => {
     const active = c.id === currentChatId ? 'active' : '';
     const date = c.updated ? fmtDate(c.updated) : '';
     return `<div class="chat-item ${active}" onclick="loadChat('${c.id}')">
@@ -120,7 +122,22 @@ function renderChatList() {
       ${c.preview ? `<div class="chat-item-preview">${esc(c.preview)}</div>` : ''}
       <button class="chat-item-del" onclick="deleteChat(event,'${c.id}')" title="Eliminar">✕</button>
     </div>`;
+  };
+  const inScope = (workspaceId, projectId = null) => chatList.filter(c =>
+    c.workspace_id === workspaceId && (projectId ? c.project_id === projectId : !c.project_id)
+  );
+  const section = (label, items, workspaceId, projectId = null, depth = '') => `<section class="space-section ${depth}">
+    <div class="space-label">${label}<button onclick="startNewChat('${workspaceId}', ${projectId ? `'${projectId}'` : 'null'})" title="Nueva conversación aquí">＋</button></div>
+    <div class="space-chats">${items.length ? items.map(chat).join('') : '<div class="space-empty">Sin conversaciones</div>'}</div>
+  </section>`;
+  const recent = chatList.slice(0, recentLimit);
+  const spaces = workspaceList.map(w => {
+    if (w.id !== 'projects') return section(`${w.icon} ${esc(w.name)}`, inScope(w.id), w.id);
+    const projectSections = projectList.map(p => section(esc(p.name), inScope('projects', p.id), 'projects', p.id, 'project')).join('');
+    const direct = inScope('projects');
+    return `<section class="space-section projects"><div class="space-label">${w.icon} ${esc(w.name)}</div>${direct.length ? `<div class="space-chats">${direct.map(chat).join('')}</div>` : ''}${projectSections}</section>`;
   }).join('');
+  el.innerHTML = (recent.length ? section('Recientes', recent, 'general') : '') + spaces;
 }
 
 function fmtDate(iso) {
@@ -133,19 +150,24 @@ function fmtDate(iso) {
   return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
-async function startNewChat() {
+async function startNewChat(workspaceId = 'general', projectId = null) {
+  // Project buttons pass the project name; resolve it to its stable id.
+  const project = projectList.find(p => p.id === projectId || p.name === projectId);
+  if (project) { workspaceId = 'projects'; projectId = project.id; }
   try {
     const r = await fetch('/api/chats', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId, project_id: projectId }),
     });
     const chat = await r.json();
-    chatList.unshift({ id: chat.id, title: chat.title, updated: chat.updated, preview: '' });
+    chatList.unshift(chat);
     currentChatId = chat.id;
+    currentScope = { workspace_id: chat.workspace_id, project_id: chat.project_id, scope_source: chat.scope_source };
     history = [];
     renderChatList();
     showWelcome();
-    document.getElementById('chat-title-hdr').textContent = 'OpenClaw';
+    renderChatScope(chat);
     closeSidebar();
     document.getElementById('msg-input').focus();
   } catch (_) {
@@ -161,8 +183,9 @@ async function loadChat(id) {
     const chat = await r.json();
     currentChatId = id;
     history = chat.messages || [];
+    currentScope = { workspace_id: chat.workspace_id || 'general', project_id: chat.project_id || null, scope_source: chat.scope_source || 'auto' };
     renderMessages();
-    document.getElementById('chat-title-hdr').textContent = chat.title || 'OpenClaw';
+    renderChatScope(chat);
     renderChatList();
     closeSidebar();
     scrollBottom();
@@ -191,12 +214,41 @@ async function saveCurrentChat() {
     await fetch(`/api/chats/${currentChatId}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history }),
+      body: JSON.stringify({ messages: history, ...currentScope }),
     });
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     chatList = (await r.json()).chats || [];
     renderChatList();
   } catch (_) { /* ignore */ }
+}
+
+function scopeName(scope) {
+  const workspace = workspaceList.find(w => w.id === scope.workspace_id);
+  const project = projectList.find(p => p.id === scope.project_id);
+  return project ? `Projects · ${project.name}` : (workspace ? workspace.name : 'General');
+}
+
+function renderChatScope(chat) {
+  document.getElementById('chat-title-hdr').textContent = scopeName(chat.workspace_id ? chat : currentScope);
+}
+
+function toggleScopePicker() {
+  if (!currentChatId) return;
+  const el = document.getElementById('scope-picker');
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+  const choices = workspaceList.filter(w => w.id !== 'projects').map(w =>
+    `<button onclick="moveCurrentChat('${w.id}', null)">${w.icon} ${esc(w.name)}</button>`
+  ).join('') + projectList.map(p => `<button onclick="moveCurrentChat('projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('');
+  el.innerHTML = `<div class="scope-picker-title">Mover conversación a…</div>${choices}`;
+  el.classList.remove('hidden');
+}
+
+async function moveCurrentChat(workspaceId, projectId) {
+  if (!currentChatId) return;
+  currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
+  await saveCurrentChat();
+  renderChatScope(currentScope);
+  document.getElementById('scope-picker').classList.add('hidden');
 }
 
 function renderMessages() {
@@ -337,7 +389,7 @@ async function sendMessage() {
 
   try {
     const contextMessages = history.slice(-16);
-    const body = { messages: contextMessages };
+    const body = { messages: contextMessages, ...currentScope };
     if (filePayload) {
       body.file_id = filePayload.file_id;
       body.filename = filePayload.filename;
@@ -384,6 +436,10 @@ async function sendMessage() {
           doneTool(bubble.parentElement.querySelector('.tools'), ev.name);
         } else if (ev.type === 'done') {
           bubble.classList.remove('cursor');
+          if (ev.workspace_id) {
+            currentScope = { workspace_id: ev.workspace_id, project_id: ev.project_id || null, scope_source: currentScope.scope_source };
+            renderChatScope(currentScope);
+          }
         } else if (ev.type === 'error') {
           bubble.classList.remove('cursor');
           bubble.innerHTML = '<span class="err">Error: ' + esc(ev.message) + '</span>';

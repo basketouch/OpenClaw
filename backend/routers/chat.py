@@ -80,9 +80,12 @@ class ChatRequest(BaseModel):
     file_id: str | None = None
     filename: str | None = None
     mime_type: str | None = None
+    workspace_id: str = "general"
+    project_id: str | None = None
+    scope_source: str = "auto"  # auto sessions persist; manual assignments always win
 
 
-def _build_instructions(mode: str) -> str:
+def _build_instructions(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
     settings = get_settings()
     try:
         tz = pytz.timezone(settings.user_timezone)
@@ -91,7 +94,10 @@ def _build_instructions(mode: str) -> str:
     now = datetime.now(timezone.utc).astimezone(tz)
     fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} ({tz.zone})"
     base = _ENGLISH_BASE if mode == "english" else _ALEX_BASE
-    return f"{base}\n\nFecha y hora actual: {fecha}"
+    # Hook only: workspace-specific memory/instructions/tools can be injected
+    # here later without coupling that policy to the sidebar representation.
+    scope = f"workspace={workspace_id}" + (f", project={project_id}" if project_id else "")
+    return f"{base}\n\nContexto de trabajo activo: {scope}\nFecha y hora actual: {fecha}"
 
 
 def _last_user_text(request: ChatRequest) -> str:
@@ -102,6 +108,8 @@ def _last_user_text(request: ChatRequest) -> str:
 
 
 def _route_mode(request: ChatRequest) -> str:
+    if request.workspace_id == "english":
+        return "english"
     if request.mode != "auto":
         return request.mode
     text = _last_user_text(request).lower()
@@ -136,6 +144,33 @@ def _route_mode(request: ChatRequest) -> str:
         return "communications"
 
     return "general"
+
+
+def _route_scope(request: ChatRequest) -> tuple[str, str | None]:
+    """Fast deterministic context router. Manual assignment is never overridden."""
+    if request.scope_source == "manual":
+        return request.workspace_id, request.project_id
+    # Preserve the auto-selected context for a continuing conversation.
+    if request.workspace_id in {"hornbills", "english"} or request.project_id:
+        return request.workspace_id, request.project_id
+
+    text = _last_user_text(request).lower()
+    project_markers = {
+        "cutsports": "cutsports", "cut sports": "cutsports",
+        "drawsports": "drawsports", "draw sports": "drawsports",
+        "the analyst": "the-analyst", "comunidad": "comunidad",
+        "basketouch hub": "basketouch-hub", "basketouch": "basketouch-hub",
+    }
+    for marker, project_id in project_markers.items():
+        if marker in text:
+            return "projects", project_id
+    hornbills_markers = ("hornbills", "hornbill", "bogor", "césar", "cesar", "video review", "vídeo", "video", "pnr", "pick and roll")
+    if any(marker in text for marker in hornbills_markers):
+        return "hornbills", None
+    english_markers = ("english coach", "inglés", "ingles", "cómo digo", "como digo", "translate to english", "practice english")
+    if any(marker in text for marker in english_markers):
+        return "english", None
+    return "general", None
 
 
 def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
@@ -257,6 +292,8 @@ async def _run_openai(request: ChatRequest):
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY no está configurada")
 
+    workspace_id, project_id = _route_scope(request)
+    request.workspace_id, request.project_id = workspace_id, project_id
     mode = _route_mode(request)
     profile = _profile_for_mode(mode)
     model, reasoning_effort = _select_model(request, mode)
@@ -269,7 +306,7 @@ async def _run_openai(request: ChatRequest):
     for _ in range(8):
         response = await client.responses.create(
             model=model,
-            instructions=_build_instructions(mode),
+            instructions=_build_instructions(mode, workspace_id, project_id),
             input=input_items,
             tools=tools,
             tool_choice="auto" if tools else "none",
@@ -308,7 +345,7 @@ async def _run_openai(request: ChatRequest):
 
     if final_response is not None:
         _write_usage(model, mode, profile, time.monotonic() - started, final_response)
-    yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model})}\n\n"
+    yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model, 'workspace_id': workspace_id, 'project_id': project_id})}\n\n"
 
 
 @router.post("/chat")
