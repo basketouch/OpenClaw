@@ -448,24 +448,65 @@ async function sendMessage() {
   }
 }
 
+function hornbillsIntent(userText, responseText) {
+  const recent = history.slice(-10).filter(m => m.role === 'user').map(m => m.content).join(' ') + ' ' + userText;
+  const text = recent.toLowerCase();
+  const score = patterns => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
+  const intents = {
+    video: score([/vídeo|video|clip|análisis|analysis|spacing|motion|low post|high post|pnr|pick and roll/g]),
+    player: score([/jugador|player|rol|role|desarrollo|development|strength|fortaleza|minutes|minutos|lesi[oó]n/g]),
+    scouting: score([/rival|opponent|scouting|game plan|contra |\bvs\b|ato|blob|slob|weakness/g]),
+    practice: score([/entrenamiento|training|práctica|practice|sesión|session|preseason|pretemporada/g]),
+    staff: score([/césar|cesar|staff|head coach|reuni[oó]n|meeting|decisi[oó]n|proposal|propuesta/g]),
+  };
+  return Object.entries(intents).sort((a, b) => b[1] - a[1])[0][1] ? Object.entries(intents).sort((a, b) => b[1] - a[1])[0][0] : 'video';
+}
+
+function hornbillsActions(intent) {
+  const actions = {
+    video: [
+      ['📊 Guardar análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
+      ['🎯 Vincular a rival', 'Convierte estas observaciones en scouting del rival o del partido correspondiente.'],
+      ['💬 Extraer preguntas', 'Extrae y guarda las preguntas técnicas pendientes para César como notas privadas.'],
+      ['🏋️ Llevar a práctica', 'Propón una práctica concreta a partir de estos hallazgos, sin crearla hasta que tenga fecha y objetivo claros.'],
+    ],
+    player: [
+      ['🔒 Nota de jugador', 'Guarda esta evaluación como nota privada de jugador, con estado Needs Review.'],
+      ['👤 Actualizar desarrollo', 'Si esta información está confirmada, actualiza el foco de desarrollo o perfil del jugador correspondiente.'],
+      ['📊 Vincular análisis', 'Guarda esto como análisis de jugador y vincúlalo al jugador correspondiente.'],
+      ['🏋️ Proponer trabajo', 'Propón una sesión individual o un objetivo de práctica para este jugador.'],
+    ],
+    scouting: [
+      ['🎯 Guardar scouting', 'Crea o actualiza el registro de Games & Scouting correspondiente con estos patrones y prioridades.'],
+      ['🛡️ Prioridades defensivas', 'Convierte esto en prioridades defensivas concretas para el game plan.'],
+      ['🏀 Atacar debilidades', 'Extrae las debilidades a atacar y añádelas al scouting del rival.'],
+      ['📊 Vincular análisis', 'Guarda el vídeo o análisis y vincúlalo al rival o partido correspondiente.'],
+    ],
+    practice: [
+      ['🏋️ Crear sesión', 'Crea un borrador de Practice Session con objetivo principal, secundarios y estado Draft.'],
+      ['🎯 Definir objetivos', 'Convierte esta conversación en objetivos principales y secundarios de práctica.'],
+      ['👤 Vincular jugadores', 'Identifica los jugadores que deben vincularse a esta sesión y prepara la relación.'],
+      ['📅 Programar', 'Si hay fecha concreta, crea el evento correspondiente en Technical Calendar.'],
+    ],
+    staff: [
+      ['💬 Pregunta para César', 'Guarda esta pregunta para César como Private Coach Note con estado Follow-up.'],
+      ['🤝 Propuesta de staff', 'Convierte esto en una propuesta para Staff Notes & Decisions con estado To Discuss.'],
+      ['✅ Registrar decisión', 'Si esta conversación contiene una decisión confirmada, regístrala como Decision para el staff.'],
+      ['🔒 Guardar privado', 'Guarda esta reflexión como nota privada, sin compartirla con el staff.'],
+    ],
+  };
+  return actions[intent] || actions.video;
+}
+
 function renderContextShortcuts(userText, responseText) {
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
-  const isQuestion = /\?|césar|cesar|pregunt/i.test(userText);
-  const actions = isQuestion ? [
-    ['💬 Pregunta para César', 'Guarda esta pregunta como una nota privada para César, con estado pendiente de revisar.'],
-    ['📊 Convertir en análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
-    ['🔒 Guardar hipótesis', 'Guarda esta observación como hipótesis pendiente de validar en Private Coach Notes.'],
-    ['🤝 Llevar a staff', 'Convierte esto en una propuesta para discutir con el staff.'],
-  ] : [
-    ['📊 Guardar análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
-    ['🔒 Guardar hipótesis', 'Guarda esta observación como hipótesis pendiente de validar en Private Coach Notes.'],
-    ['💬 Pregunta para César', 'Formula y guarda la pregunta pendiente para César como nota privada.'],
-    ['🤝 Llevar a staff', 'Convierte esto en una propuesta para discutir con el staff.'],
-  ];
+  const intent = hornbillsIntent(userText, responseText);
+  const labels = { video: 'Vídeo y análisis', player: 'Jugador', scouting: 'Rival y scouting', practice: 'Entrenamiento', staff: 'Staff y César' };
+  const actions = hornbillsActions(intent);
   const el = document.createElement('div');
   el.className = 'context-shortcuts';
-  el.innerHTML = '<span class="context-shortcuts-label">¿Qué hacemos con esto?</span>' + actions.map(([label, prompt]) =>
+  el.innerHTML = `<span class="context-shortcuts-label">${labels[intent]} · ¿Qué hacemos con esto?</span>` + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {
