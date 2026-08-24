@@ -84,6 +84,7 @@ class ChatRequest(BaseModel):
     workspace_id: str = "general"
     project_id: str | None = None
     scope_source: str = "auto"  # auto sessions persist; manual assignments always win
+    assist_context: str | None = None  # temporary specialist help; does not move the chat
 
 
 def _build_instructions(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
@@ -110,6 +111,8 @@ def _last_user_text(request: ChatRequest) -> str:
 
 
 def _route_mode(request: ChatRequest) -> str:
+    if request.assist_context == "english":
+        return "english"
     if request.workspace_id == "english":
         return "english"
     if request.mode != "auto":
@@ -301,7 +304,7 @@ async def _run_openai(request: ChatRequest):
     workspace_id, project_id = _route_scope(request)
     request.workspace_id, request.project_id = workspace_id, project_id
     mode = _route_mode(request)
-    if workspace_id == "hornbills":
+    if workspace_id == "hornbills" and mode == "general":
         mode = "hornbills"
     profile = _profile_for_mode(mode)
     model, reasoning_effort = _select_model(request, mode)

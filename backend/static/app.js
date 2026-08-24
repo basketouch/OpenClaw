@@ -5,6 +5,7 @@ let busy = false;
 let currentChatId = null;
 let pendingFile = null; // { file_id, filename, mime_type, size }
 let pushSub = null;
+let nextAssistContext = null;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -285,9 +286,10 @@ function showWelcome() {
 
 function newChat() { startNewChat(); }
 
-function prefill(text) {
+function prefill(text, assistContext = null) {
   const input = document.getElementById('msg-input');
   input.value = text;
+  nextAssistContext = assistContext;
   resize(input);
   sendMessage();
 }
@@ -374,6 +376,8 @@ async function sendMessage() {
   try {
     const contextMessages = history.slice(-16);
     const body = { messages: contextMessages, ...currentScope };
+    if (nextAssistContext) body.assist_context = nextAssistContext;
+    nextAssistContext = null;
     if (filePayload) {
       body.file_id = filePayload.file_id;
       body.filename = filePayload.filename;
@@ -467,29 +471,29 @@ function hornbillsActions(intent) {
     video: [
       ['📊 Guardar análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
       ['🎯 Vincular a rival', 'Convierte estas observaciones en scouting del rival o del partido correspondiente.'],
-      ['💬 Extraer preguntas', 'Extrae y guarda las preguntas técnicas pendientes para César como notas privadas.'],
+      ['🇬🇧 Preparar para César', 'Ayúdame a formular para César, en inglés natural y oral, las preguntas que salen de esta revisión.', 'english'],
       ['🏋️ Llevar a práctica', 'Propón una práctica concreta a partir de estos hallazgos, sin crearla hasta que tenga fecha y objetivo claros.'],
     ],
     player: [
       ['🔒 Nota de jugador', 'Guarda esta evaluación como nota privada de jugador, con estado Needs Review.'],
       ['👤 Actualizar desarrollo', 'Si esta información está confirmada, actualiza el foco de desarrollo o perfil del jugador correspondiente.'],
       ['📊 Vincular análisis', 'Guarda esto como análisis de jugador y vincúlalo al jugador correspondiente.'],
-      ['🏋️ Proponer trabajo', 'Propón una sesión individual o un objetivo de práctica para este jugador.'],
+      ['🇬🇧 Preparar feedback', 'Ayúdame a formular en inglés un feedback breve y constructivo para este jugador.', 'english'],
     ],
     scouting: [
       ['🎯 Guardar scouting', 'Crea o actualiza el registro de Games & Scouting correspondiente con estos patrones y prioridades.'],
       ['🛡️ Prioridades defensivas', 'Convierte esto en prioridades defensivas concretas para el game plan.'],
       ['🏀 Atacar debilidades', 'Extrae las debilidades a atacar y añádelas al scouting del rival.'],
-      ['📊 Vincular análisis', 'Guarda el vídeo o análisis y vincúlalo al rival o partido correspondiente.'],
+      ['🇬🇧 Brief para staff', 'Ayúdame a explicar este scouting en inglés claro para el staff.', 'english'],
     ],
     practice: [
       ['🏋️ Crear sesión', 'Crea un borrador de Practice Session con objetivo principal, secundarios y estado Draft.'],
       ['🎯 Definir objetivos', 'Convierte esta conversación en objetivos principales y secundarios de práctica.'],
       ['👤 Vincular jugadores', 'Identifica los jugadores que deben vincularse a esta sesión y prepara la relación.'],
-      ['📅 Programar', 'Si hay fecha concreta, crea el evento correspondiente en Technical Calendar.'],
+      ['🇬🇧 Explicar práctica', 'Ayúdame a explicar esta práctica en inglés claro para el staff o los jugadores.', 'english'],
     ],
     staff: [
-      ['💬 Pregunta para César', 'Guarda esta pregunta para César como Private Coach Note con estado Follow-up.'],
+      ['🇬🇧 Pregunta para César', 'Ayúdame a formular esta pregunta para César en inglés natural y directo.', 'english'],
       ['🤝 Propuesta de staff', 'Convierte esto en una propuesta para Staff Notes & Decisions con estado To Discuss.'],
       ['✅ Registrar decisión', 'Si esta conversación contiene una decisión confirmada, regístrala como Decision para el staff.'],
       ['🔒 Guardar privado', 'Guarda esta reflexión como nota privada, sin compartirla con el staff.'],
@@ -510,12 +514,12 @@ function renderContextShortcuts(userText, responseText) {
   const actions = hornbillsActions(intent);
   const el = document.createElement('div');
   el.className = 'context-shortcuts';
-  el.innerHTML = `<span class="context-shortcuts-label">${labels[intent]} · ¿Qué hacemos con esto?</span>` + actions.map(([label, prompt]) =>
-    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  el.innerHTML = `<span class="context-shortcuts-label">${labels[intent]} · ¿Qué hacemos con esto?</span>` + actions.map(([label, prompt, assist]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}" data-assist="${assist || ''}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {
     const prompt = e.target.dataset.prompt;
-    if (prompt) prefill(prompt);
+    if (prompt) prefill(prompt, e.target.dataset.assist || null);
   });
   document.getElementById('messages').appendChild(el);
   scrollBottom();
