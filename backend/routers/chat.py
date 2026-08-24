@@ -207,6 +207,8 @@ def _profile_for_mode(mode: str, workspace_id: str = "general", project_id: str 
         return "the_analyst"
     if workspace_id == "projects" and project_id == "comunidad":
         return "comunidad"
+    if workspace_id == "projects" and project_id == "basketouch-hub":
+        return "basketouch_hub"
     if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"

@@ -537,6 +537,10 @@ function renderContextShortcuts(userText, responseText) {
     renderComunidadShortcuts(userText, responseText);
     return;
   }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'basketouch-hub') {
+    renderBasketouchHubShortcuts(userText, responseText);
+    return;
+  }
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
@@ -683,6 +687,39 @@ function renderComunidadShortcuts(userText, responseText) {
   const el = document.createElement('div');
   el.className = 'context-shortcuts comunidad-shortcuts';
   el.innerHTML = '<span class="context-shortcuts-label">Comunidad · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderBasketouchHubShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const metrics = /métrica|metrica|kpi|dashboard|funnel|mrr|ingresos|usuarios|retención|retencion|datos|supabase|instrumentación|instrumentacion/.test(text);
+  const planning = /prioridad|semana|acción|accion|tarea|hacer|bloqueado|siguiente paso|roadmap|coordinar/.test(text);
+  const actions = metrics ? [
+    ['📊 Contrastar fuente', 'Indica qué fuente real debe confirmar cada métrica y qué dato no está disponible todavía.'],
+    ['🧩 Revisar módulo', 'Contrasta esta necesidad con Módulos por producto y separa lo implementado, pendiente y propuesto.'],
+    ['🧭 Diseñar instrumentación', 'Convierte esto en una propuesta de instrumentación: evento o fuente, propietario, frecuencia y decisión que permitirá tomar.'],
+    ['🎯 Crear acción transversal', 'Si requiere coordinación entre productos o infraestructura, crea o actualiza una Acción central tras comprobar duplicados.'],
+  ] : planning ? [
+    ['✅ Llevar a Acciones', 'Comprueba duplicados y crea o actualiza esta acción central en Inbox, con resultado esperado, próximo paso y bloqueo si existe.'],
+    ['📅 Priorizar semana', 'Revisa Revisión semanal y propone si esta acción debe entrar en Esta semana, respetando el límite de cinco.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Hub y separa lo verificado, lo pendiente y la decisión necesaria.'],
+    ['🗺️ Llevar al roadmap', 'Convierte esto en una propuesta de roadmap con alcance, dependencia y criterio de prioridad.'],
+  ] : [
+    ['✅ Crear acción transversal', 'Si esto necesita trabajo operativo entre productos, comprueba duplicados y crea o actualiza una Acción central en Inbox.'],
+    ['📅 Revisar semana', 'Resume las acciones activas y los compromisos de esta semana, sin crear una lista paralela.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Hub antes de afirmar que una capacidad está disponible o terminada.'],
+    ['📊 Separar dato y propuesta', 'Distingue los datos verificados, los datos que faltan y la propuesta de siguiente paso.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts basketouch-hub-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">Basketouch Hub · siguiente paso</span>' + actions.map(([label, prompt]) =>
     `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
   ).join('');
   el.addEventListener('click', e => {

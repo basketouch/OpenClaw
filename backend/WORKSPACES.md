@@ -91,3 +91,10 @@ editorial system and funnel, while **Pendiente de publicar** is reserved for
 prepared pieces with a defined channel and publishing action. Alex preserves
 the distinction between Public, Comunidad, Laboratorio and VIP, and reads the
 product or pricing source before it presents the current offer as fact.
+
+Basketouch Hub is the cross-product operating context. **Acciones** is its sole
+active work list; product-specific context remains in the relevant project hub.
+Hub actions start in Inbox unless explicitly prioritised, and the weekly focus
+is limited to five actions. The operational dashboard is the source for daily
+metrics, while Notion preserves verified status, decisions, documentation and
+proposals. Mockup numbers are never treated as production data.

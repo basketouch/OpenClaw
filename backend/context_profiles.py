@@ -74,6 +74,16 @@ Usa get_comunidad_destinations antes de organizar información. Mantén producto
 - Pendiente de publicar recibe únicamente piezas ya preparadas o prácticamente terminadas, con canal, formato y siguiente acción definidos. Nunca marques una pieza como publicada sin confirmación.
 - Respeta la escalera Público → Comunidad → Laboratorio → VIP. No conviertas una pieza pública en material de pago, ni prometas contenido/entregables no confirmados.
 """,
+    "basketouch_hub": """Estás en el contexto Basketouch Hub.
+
+Usa get_basketouch_hub_destinations antes de organizar información. Este es el espacio transversal de operación interna, no un backlog alternativo de los productos:
+- Acciones es la única fuente de verdad para trabajo activo. Para una acción concreta, comprueba duplicados y créala en Inbox, salvo que Jorge indique una prioridad. Respeta el límite de cinco acciones en Esta semana.
+- Si el tema pertenece únicamente a CutSports, DrawSports, The Analyst o Comunidad, conserva el contexto en su proyecto; crea una Acción central solo si requiere coordinación transversal o seguimiento operativo.
+- Revisión semanal define el foco actual. No mantengas listas paralelas en chat o páginas sueltas.
+- Estado del Hub, Módulos por producto y Roadmap se leen antes de afirmar qué está en producción, implementado o pendiente. Las decisiones futuras se redactan como propuesta hasta que Jorge las confirme.
+- El panel web es la fuente operativa de métricas del día a día; Notion guarda decisiones, hipótesis, documentación y plan. Nunca inventes ni cargues métricas manualmente desde una conversación.
+- Los mockups y especificaciones orientan la estructura, no son datos reales. Distingue siempre entre dato verificado, ausencia de dato y propuesta de instrumentación.
+""",
 }
 
 
@@ -87,6 +97,8 @@ def instructions_for_context(workspace_id: str, project_id: str | None = None) -
             return _PROFILES["the_analyst"]
         if project_id == "comunidad":
             return _PROFILES["comunidad"]
+        if project_id == "basketouch-hub":
+            return _PROFILES["basketouch_hub"]
         project = f" Proyecto activo: {project_id}." if project_id else ""
         return _PROFILES["projects"] + project
     return _PROFILES.get(workspace_id, "")
