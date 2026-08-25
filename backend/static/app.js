@@ -90,6 +90,10 @@ let chatList = [];
 let workspaceList = [];
 let projectList = [];
 let currentScope = { workspace_id: 'general', project_id: null, scope_source: 'auto' };
+let openChatMenuId = null;
+let movingChatId = null;
+let renamingChatId = null;
+let collapsedSpaces = new Set(JSON.parse(localStorage.getItem('oc_collapsed_spaces') || '[]'));
 
 async function loadChatList() {
   try {
@@ -114,33 +118,110 @@ function renderChatList() {
   const chat = c => {
     const active = c.id === currentChatId ? 'active' : '';
     const date = c.updated ? fmtDate(c.updated) : '';
+    const editing = c.id === renamingChatId;
+    const menuOpen = c.id === openChatMenuId;
     return `<div class="chat-item ${active}" onclick="loadChat('${c.id}')">
       <div class="chat-item-top">
-        <span class="chat-item-title">${esc(c.title)}</span>
+        ${editing
+          ? `<input class="chat-item-title-input" id="chat-title-input-${c.id}" value="${esc(c.title)}" maxlength="120" onclick="event.stopPropagation()" onkeydown="onRenameKey(event, '${c.id}')" onblur="saveInlineRename('${c.id}')">`
+          : `<span class="chat-item-title">${esc(c.title)}</span>`}
         <span class="chat-item-date">${date}</span>
       </div>
       ${c.preview ? `<div class="chat-item-preview">${esc(c.preview)}</div>` : ''}
-      <button class="chat-item-edit" onclick="renameChat(event,'${c.id}')" title="Editar nombre">✎</button>
-      <button class="chat-item-del" onclick="deleteChat(event,'${c.id}')" title="Eliminar">✕</button>
+      <button class="chat-item-more" onclick="toggleChatMenu(event, '${c.id}')" aria-label="Opciones de conversación" aria-expanded="${menuOpen}">⋯</button>
+      ${menuOpen ? `<div class="chat-action-menu" onclick="event.stopPropagation()">${movingChatId === c.id
+        ? `<div class="chat-action-menu-title">Mover a…</div>
+           <button onclick="moveChat('${c.id}', 'general', null)">💬 General</button>
+           <button onclick="moveChat('${c.id}', 'hornbills', null)">🏀 Hornbills</button>
+           <div class="chat-action-menu-title">Proyectos</div>
+           ${projectList.map(p => `<button onclick="moveChat('${c.id}', 'projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('')}
+           <button class="chat-menu-back" onclick="showChatActions('${c.id}')">‹ Volver</button>`
+        : `<button onclick="showMoveChoices('${c.id}')">Mover a…</button>
+           <button onclick="beginRenameChat('${c.id}')">Renombrar</button>
+           <button class="danger" onclick="deleteChat(event,'${c.id}')">Eliminar</button>`}
+      </div>` : ''}
     </div>`;
   };
   const inScope = (workspaceId, projectId = null) => chatList.filter(c =>
     c.workspace_id === workspaceId && (projectId ? c.project_id === projectId : !c.project_id)
   );
-  const section = (label, items, workspaceId, projectId = null, depth = '') => `<section class="space-section ${depth}">
-    <div class="space-label">${label}<button onclick="startNewChat('${workspaceId}', ${projectId ? `'${projectId}'` : 'null'})" title="Nueva conversación aquí">＋</button></div>
-    <div class="space-chats">${items.length ? items.map(chat).join('') : '<div class="space-empty">Sin conversaciones</div>'}</div>
-  </section>`;
+  const section = (label, items, workspaceId, projectId = null, depth = '', key = workspaceId + (projectId ? `:${projectId}` : '')) => {
+    const collapsed = collapsedSpaces.has(key);
+    return `<section class="space-section ${depth} ${collapsed ? 'collapsed' : ''}">
+      <div class="space-label">
+        <button class="space-collapse" onclick="toggleSpace(event, '${key}')" aria-expanded="${!collapsed}" title="Plegar o desplegar">${collapsed ? '›' : '⌄'}</button>
+        <button class="space-name" onclick="toggleSpace(event, '${key}')">${label}</button>
+        <button class="space-new" onclick="startNewChat('${workspaceId}', ${projectId ? `'${projectId}'` : 'null'})" title="Nueva conversación aquí">＋</button>
+      </div>
+      <div class="space-chats">${items.length ? items.map(chat).join('') : '<div class="space-empty">Sin conversaciones</div>'}</div>
+    </section>`;
+  };
   const spaces = workspaceList.map(w => {
     if (w.id !== 'projects') return section(`${w.icon} ${esc(w.name)}`, inScope(w.id), w.id);
     const projectSections = projectList.map(p => section(esc(p.name), inScope('projects', p.id), 'projects', p.id, 'project')).join('');
     const direct = inScope('projects');
-    return `<section class="space-section projects"><div class="space-label">${w.icon} ${esc(w.name)}</div>${direct.length ? `<div class="space-chats">${direct.map(chat).join('')}</div>` : ''}${projectSections}</section>`;
+    const collapsed = collapsedSpaces.has('projects');
+    return `<section class="space-section projects ${collapsed ? 'collapsed' : ''}">
+      <div class="space-label">
+        <button class="space-collapse" onclick="toggleSpace(event, 'projects')" aria-expanded="${!collapsed}" title="Plegar o desplegar">${collapsed ? '›' : '⌄'}</button>
+        <button class="space-name" onclick="toggleSpace(event, 'projects')">${w.icon} ${esc(w.name)}</button>
+        <button class="space-new" onclick="startNewChat('projects', null)" title="Nueva conversación aquí">＋</button>
+      </div>
+      <div class="space-chats">${direct.length ? direct.map(chat).join('') : ''}${projectSections}</div>
+    </section>`;
   }).join('');
   // A conversation belongs to exactly one workspace. Do not duplicate recent
   // conversations at the top of the sidebar: that made scoped chats look like
   // General chats and obscured where they were actually saved.
   el.innerHTML = spaces;
+  if (renamingChatId) {
+    const input = document.getElementById(`chat-title-input-${renamingChatId}`);
+    if (input) { input.focus(); input.select(); }
+  }
+}
+
+function toggleSpace(e, key) {
+  e.stopPropagation();
+  if (collapsedSpaces.has(key)) collapsedSpaces.delete(key); else collapsedSpaces.add(key);
+  localStorage.setItem('oc_collapsed_spaces', JSON.stringify([...collapsedSpaces]));
+  renderChatList();
+}
+
+function toggleChatMenu(e, id) {
+  e.stopPropagation();
+  openChatMenuId = openChatMenuId === id ? null : id;
+  movingChatId = null;
+  renderChatList();
+}
+
+function showMoveChoices(id) {
+  movingChatId = id;
+  renderChatList();
+}
+
+function showChatActions(id) {
+  movingChatId = null;
+  openChatMenuId = id;
+  renderChatList();
+}
+
+async function moveChat(id, workspaceId, projectId) {
+  try {
+    const r = await fetch(`/api/chats/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' }),
+    });
+    if (!r.ok) throw new Error('No se pudo mover');
+    chatList = chatList.map(c => c.id === id ? { ...c, workspace_id: workspaceId, project_id: projectId, scope_source: 'manual', updated: new Date().toISOString() } : c);
+    if (currentChatId === id) {
+      currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
+      renderChatScope(currentScope);
+    }
+    openChatMenuId = null;
+    movingChatId = null;
+    renderChatList();
+  } catch (_) { alert('No se pudo mover la conversación.'); }
 }
 
 function openNewChatPicker() {
@@ -212,6 +293,8 @@ async function loadChat(id) {
 
 async function deleteChat(e, id) {
   e.stopPropagation();
+  const chat = chatList.find(c => c.id === id);
+  if (!window.confirm(`¿Eliminar “${chat ? chat.title : 'esta conversación'}”? Esta acción no se puede deshacer.`)) return;
   await fetch(`/api/chats/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
@@ -225,22 +308,32 @@ async function deleteChat(e, id) {
   }
 }
 
-async function renameChat(e, id) {
-  e.stopPropagation();
+function beginRenameChat(id) {
+  openChatMenuId = null;
+  renamingChatId = id;
+  renderChatList();
+}
+
+function onRenameKey(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  if (e.key === 'Escape') { renamingChatId = null; renderChatList(); }
+}
+
+async function saveInlineRename(id) {
+  if (renamingChatId !== id) return;
+  const input = document.getElementById(`chat-title-input-${id}`);
+  const title = input ? input.value.trim() : '';
+  renamingChatId = null;
+  if (!title) { renderChatList(); return; }
   const chat = chatList.find(c => c.id === id);
-  const currentTitle = chat ? chat.title : '';
-  const title = window.prompt('Nombre de la conversación', currentTitle);
-  if (title === null) return;
-  const cleanTitle = title.trim();
-  if (!cleanTitle) return;
   try {
     const r = await fetch(`/api/chats/${id}/title`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: cleanTitle }),
+      body: JSON.stringify({ title }),
     });
     if (!r.ok) throw new Error('No se pudo cambiar el nombre');
-    chatList = chatList.map(c => c.id === id ? { ...c, title: cleanTitle, updated: new Date().toISOString() } : c);
+    chatList = chatList.map(c => c.id === id ? { ...c, title, updated: new Date().toISOString() } : c);
     renderChatList();
   } catch (_) {
     alert('No se pudo cambiar el nombre de la conversación.');
@@ -270,29 +363,6 @@ function scopeName(scope) {
 function renderChatScope(scope = currentScope) {
   const el = document.getElementById('chat-title-hdr');
   if (el) el.textContent = scopeName(scope);
-}
-
-function toggleScopePicker() {
-  if (!currentChatId) return;
-  const el = document.getElementById('scope-picker');
-  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
-  const workspaces = workspaceList.filter(w => w.id !== 'projects').map(w =>
-    `<button onclick="moveCurrentChat('${w.id}', null)">${w.icon} ${esc(w.name)}</button>`
-  ).join('');
-  const projects = projectList.map(p =>
-    `<button onclick="moveCurrentChat('projects', '${p.id}')">🚀 ${esc(p.name)}</button>`
-  ).join('');
-  el.innerHTML = `<div class="scope-picker-title">Mover esta conversación a…</div>${workspaces}<div class="new-chat-picker-divider">Projects</div>${projects}`;
-  el.classList.remove('hidden');
-  if (window.innerWidth <= 768) openSidebar();
-}
-
-async function moveCurrentChat(workspaceId, projectId) {
-  if (!currentChatId) return;
-  currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
-  await saveCurrentChat();
-  renderChatScope(currentScope);
-  document.getElementById('scope-picker').classList.add('hidden');
 }
 
 function renderMessages() {

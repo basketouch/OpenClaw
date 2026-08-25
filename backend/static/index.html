@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Alex — OpenClaw</title>
-  <link rel="stylesheet" href="/style.css?v=23">
+  <link rel="stylesheet" href="/style.css?v=24">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icon.png" type="image/png">
@@ -50,7 +50,6 @@
       <div id="chat-list" class="chat-list">
         <p class="no-chats">Cargando…</p>
       </div>
-      <div id="scope-picker" class="scope-picker hidden"></div>
     </aside>
 
     <!-- Main area -->
@@ -63,7 +62,7 @@
           <span class="hdr-icon">⚡</span>
           <div>
             <div class="hdr-title">Alex</div>
-            <button class="hdr-sub scope-button" id="chat-title-hdr" onclick="toggleScopePicker()">General</button>
+            <span class="hdr-sub" id="chat-title-hdr">General</span>
           </div>
         </div>
         <div class="hdr-right">
@@ -152,7 +151,7 @@
   </div>
 </div>
 
-<script src="/app.js?v=31"></script>
+  <script src="/app.js?v=32"></script>
 <script src="/mode.js?v=1"></script>
 </body>
 </html>

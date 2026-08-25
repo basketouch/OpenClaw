@@ -139,7 +139,9 @@ async def get_chat(cid: str, _: str = Depends(verify_token)):
 
 
 class SaveBody(BaseModel):
-    messages: list[dict]
+    # A scope change from the sidebar must not need to resend (or risk
+    # overwriting) the conversation body.
+    messages: list[dict] | None = None
     title: str | None = None
     mode: str | None = None
     workspace_id: str | None = None
@@ -158,7 +160,8 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
     except FileNotFoundError:
         raise HTTPException(404, "Chat no encontrado")
 
-    chat["messages"] = body.messages[-40:]
+    if body.messages is not None:
+        chat["messages"] = body.messages[-40:]
     chat["updated"] = datetime.now(timezone.utc).isoformat()
     _normalise_scope(chat)
 
@@ -176,17 +179,18 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
 
     if body.title:
         chat["title"] = body.title
-    elif len(body.messages) >= 1 and chat["title"] == "Nueva conversación":
+    elif body.messages and chat["title"] == "Nueva conversación":
         first = body.messages[0].get("content", "")
         if isinstance(first, str):
             chat["title"] = first[:50] + ("…" if len(first) > 50 else "")
 
-    for msg in reversed(body.messages):
-        if msg["role"] == "assistant":
-            content = msg.get("content", "")
-            if isinstance(content, str):
-                chat["preview"] = content[:80]
-            break
+    if body.messages is not None:
+        for msg in reversed(body.messages):
+            if msg["role"] == "assistant":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    chat["preview"] = content[:80]
+                break
 
     _save(chat)
     return {"success": True, "mode": chat.get("mode", "auto"), "workspace_id": chat["workspace_id"], "project_id": chat.get("project_id")}
