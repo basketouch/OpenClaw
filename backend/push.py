@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import shutil
+from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +48,11 @@ def get_or_create_vapid() -> tuple[str, str]:
 
     if data:
         log.warning("Invalid VAPID key detected; regenerating it and clearing old subscriptions")
+        backup = f"{_VAPID_FILE}.invalid-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.backup"
+        try:
+            shutil.copy2(_VAPID_FILE, backup)
+        except OSError as exc:
+            log.warning("Could not back up invalid VAPID key: %s", exc)
         _clear_subscriptions()
 
     from py_vapid import Vapid
