@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
 from auth import verify_token
+from config import get_openai_client, get_settings
 
 UPLOADS_DIR = "/data/uploads"
 MAX_SIZE = 20 * 1024 * 1024  # 20MB
@@ -15,6 +16,7 @@ ALLOWED = {
     "application/pdf",
     "text/plain", "text/markdown", "text/csv",
 }
+MAX_AUDIO_SIZE = 20 * 1024 * 1024  # 20MB
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
@@ -33,3 +35,35 @@ async def upload(file: UploadFile = File(...), _: str = Depends(verify_token)):
     with open(path, "wb") as f:
         f.write(data)
     return {"file_id": fid, "filename": file.filename, "mime_type": file.content_type, "size": len(data)}
+
+
+@router.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...), _: str = Depends(verify_token)):
+    """Turn a short voice note into editable text without storing the audio."""
+    content_type = file.content_type or ""
+    if not content_type.startswith("audio/") and content_type not in {"video/webm", "video/mp4"}:
+        raise HTTPException(400, "Envía un archivo de audio válido")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "El audio está vacío")
+    if len(data) > MAX_AUDIO_SIZE:
+        raise HTTPException(400, "Audio demasiado grande (máximo 20MB)")
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(503, "La transcripción no está configurada")
+
+    filename = file.filename or "nota-de-voz.webm"
+    try:
+        result = await get_openai_client().audio.transcriptions.create(
+            model=settings.transcription_model,
+            file=(filename, data, content_type),
+        )
+    except Exception as exc:
+        raise HTTPException(502, "No se pudo transcribir el audio") from exc
+
+    text = (getattr(result, "text", "") or "").strip()
+    if not text:
+        raise HTTPException(422, "No se ha podido detectar voz en el audio")
+    return {"text": text}

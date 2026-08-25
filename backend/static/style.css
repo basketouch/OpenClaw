@@ -311,6 +311,18 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
 #send-btn:hover:not(:disabled) { background: var(--accent-h); }
 #send-btn:disabled { opacity: .4; cursor: not-allowed; }
 
+#voice-btn, #attach-btn {
+  width: 34px; height: 34px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer;
+}
+#voice-btn:hover:not(:disabled), #attach-btn:hover { color: var(--text); border-color: var(--muted); }
+#voice-btn:disabled { opacity: .45; cursor: not-allowed; }
+#voice-btn.recording { background: rgba(239,68,68,.15); border-color: var(--err); color: #fca5a5; animation: voice-pulse 1.2s ease-in-out infinite; }
+#voice-btn.working { color: var(--accent); }
+.voice-status { max-width: 760px; margin: 0 auto 7px; color: var(--muted); font-size: 12px; }
+.voice-status.error { color: var(--err); }
+@keyframes voice-pulse { 50% { opacity: .55; } }
+
 /* ── Mobile / iPhone ── */
 @media (max-width: 768px) {
   .sidebar {

@@ -6,6 +6,9 @@ let currentChatId = null;
 let pendingFile = null; // { file_id, filename, mime_type, size }
 let pushSub = null;
 let nextAssistContext = null;
+let mediaRecorder = null;
+let recordingStream = null;
+let audioChunks = [];
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -418,6 +421,87 @@ function onKey(e) {
   if (e.key !== 'Enter' || e.shiftKey) return;
   e.preventDefault();
   sendMessage();
+}
+
+// ─── Voice dictation ────────────────────────────────────────────────────────
+
+function setVoiceStatus(message = '', error = false) {
+  const status = document.getElementById('voice-status');
+  status.textContent = message;
+  status.classList.toggle('hidden', !message);
+  status.classList.toggle('error', error);
+}
+
+function setVoiceButton(recording = false, working = false) {
+  const button = document.getElementById('voice-btn');
+  button.classList.toggle('recording', recording);
+  button.classList.toggle('working', working);
+  button.disabled = working;
+  button.title = recording ? 'Detener dictado' : (working ? 'Transcribiendo…' : 'Dictar un mensaje');
+  button.setAttribute('aria-label', button.title);
+}
+
+async function toggleVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    setVoiceStatus('La grabación no está disponible en este navegador.', true);
+    return;
+  }
+  try {
+    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    const preferredType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm']
+      .find(type => MediaRecorder.isTypeSupported(type));
+    mediaRecorder = preferredType ? new MediaRecorder(recordingStream, { mimeType: preferredType }) : new MediaRecorder(recordingStream);
+    mediaRecorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
+    mediaRecorder.onstop = transcribeRecording;
+    mediaRecorder.start();
+    setVoiceButton(true);
+    setVoiceStatus('● Escuchando… Toca el micrófono al terminar.');
+  } catch (error) {
+    const denied = error && error.name === 'NotAllowedError';
+    setVoiceStatus(denied ? 'Necesitas permitir el micrófono para dictar.' : 'No se ha podido iniciar el micrófono.', true);
+    stopRecordingTracks();
+  }
+}
+
+function stopRecordingTracks() {
+  if (recordingStream) recordingStream.getTracks().forEach(track => track.stop());
+  recordingStream = null;
+}
+
+async function transcribeRecording() {
+  const type = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'audio/webm';
+  const extension = type.includes('mp4') ? 'm4a' : 'webm';
+  const audio = new Blob(audioChunks, { type });
+  mediaRecorder = null;
+  audioChunks = [];
+  stopRecordingTracks();
+  if (!audio.size) { setVoiceButton(); setVoiceStatus('No se ha grabado audio.', true); return; }
+
+  setVoiceButton(false, true);
+  setVoiceStatus('Transcribiendo…');
+  try {
+    const data = new FormData();
+    data.append('file', audio, `nota-de-voz.${extension}`);
+    const response = await fetch('/api/transcribe', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: data,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'No se pudo transcribir');
+    const input = document.getElementById('msg-input');
+    input.value = [input.value.trim(), result.text].filter(Boolean).join(input.value.trim() ? ' ' : '');
+    resize(input);
+    input.focus();
+    setVoiceStatus('Texto listo para revisar y enviar.');
+  } catch (error) {
+    setVoiceStatus(error.message || 'No se pudo transcribir el audio.', true);
+  } finally {
+    setVoiceButton();
+  }
 }
 
 // ─── File upload ─────────────────────────────────────────────────────────────
@@ -918,7 +1002,11 @@ function doneTool(container, name) {
   if (el) { el.className = 'tool done'; el.innerHTML = '<span class="tool-icon">✓</span> ' + esc(name); }
 }
 
-function setDisabled(v) { document.getElementById('send-btn').disabled = v; }
+function setDisabled(v) {
+  document.getElementById('send-btn').disabled = v;
+  const voiceButton = document.getElementById('voice-btn');
+  if (voiceButton && !(mediaRecorder && mediaRecorder.state === 'recording')) voiceButton.disabled = v;
+}
 
 function setStatus(state) {
   document.getElementById('status-dot').className = state === 'loading' ? 'dot loading' : 'dot';
