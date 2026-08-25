@@ -94,7 +94,8 @@ async def create_speech(body: SpeechBody, _: str = Depends(verify_token)):
             response_format="mp3",
             instructions="Habla de forma natural, calmada y clara. Respeta el idioma del texto.",
         )
-        audio = await result.read()
+        # The OpenAI SDK returns the binary payload directly here.
+        audio = result.read()
     except Exception as exc:
         raise HTTPException(502, "No se pudo generar la respuesta de voz") from exc
     return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
