@@ -39,10 +39,10 @@ async def execute_tool(name: str, inputs: dict) -> Any:
 
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
-        "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
+        "get_datetime",
         "web_search", "list_scheduled_tasks", "create_scheduled_task",
         "delete_scheduled_task", "toggle_scheduled_task",
-        "search_notion", "read_notion_page", "create_notion_page",
+        "search_notion", "read_notion_page", "append_notion_note",
         "query_notion_actions", "upsert_notion_action",
     },
     "communications": {

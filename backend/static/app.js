@@ -182,6 +182,7 @@ async function startNewChat(workspaceId = 'general', projectId = null) {
     currentScope = { workspace_id: chat.workspace_id, project_id: chat.project_id, scope_source: chat.scope_source };
     history = [];
     renderChatList();
+    renderChatScope(currentScope);
     showWelcome();
     closeSidebar();
     document.getElementById('msg-input').focus();
@@ -201,6 +202,7 @@ async function loadChat(id) {
     currentScope = { workspace_id: chat.workspace_id || 'general', project_id: chat.project_id || null, scope_source: chat.scope_source || 'auto' };
     renderMessages();
     renderChatList();
+    renderChatScope(currentScope);
     closeSidebar();
     scrollBottom();
     document.getElementById('msg-input').focus();
@@ -256,6 +258,39 @@ async function saveCurrentChat() {
     chatList = (await r.json()).chats || [];
     renderChatList();
   } catch (_) { /* ignore */ }
+}
+
+function scopeName(scope) {
+  const workspace = workspaceList.find(w => w.id === scope.workspace_id);
+  const project = projectList.find(p => p.id === scope.project_id);
+  return project ? `Projects · ${project.name}` : (workspace ? workspace.name : 'General');
+}
+
+function renderChatScope(scope = currentScope) {
+  const el = document.getElementById('chat-title-hdr');
+  if (el) el.textContent = scopeName(scope);
+}
+
+function toggleScopePicker() {
+  if (!currentChatId) return;
+  const el = document.getElementById('scope-picker');
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+  const workspaces = workspaceList.filter(w => w.id !== 'projects').map(w =>
+    `<button onclick="moveCurrentChat('${w.id}', null)">${w.icon} ${esc(w.name)}</button>`
+  ).join('');
+  const projects = projectList.map(p =>
+    `<button onclick="moveCurrentChat('projects', '${p.id}')">🚀 ${esc(p.name)}</button>`
+  ).join('');
+  el.innerHTML = `<div class="scope-picker-title">Mover esta conversación a…</div>${workspaces}<div class="new-chat-picker-divider">Projects</div>${projects}`;
+  el.classList.remove('hidden');
+}
+
+async function moveCurrentChat(workspaceId, projectId) {
+  if (!currentChatId) return;
+  currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
+  await saveCurrentChat();
+  renderChatScope(currentScope);
+  document.getElementById('scope-picker').classList.add('hidden');
 }
 
 function renderMessages() {
