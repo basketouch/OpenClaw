@@ -37,6 +37,12 @@ async def execute_tool(name: str, inputs: dict) -> Any:
     return func(**inputs)
 
 
+_ENGLISH_COACH_TOOLS = {
+    "save_english_phrase", "search_english_phrases", "get_english_review",
+    "record_english_result", "get_english_progress",
+}
+
+
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
         "get_datetime",
@@ -44,48 +50,48 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "delete_scheduled_task", "toggle_scheduled_task",
         "search_notion", "read_notion_page", "append_notion_note",
         "query_notion_actions", "upsert_notion_action",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "communications": {
         "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
         "send_email", "reply_email", "send_telegram",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "newsflow": {
         "get_datetime", "query_newsflow", "insert_newsflow", "update_newsflow", "web_search",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "admin": {
         "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
         "run_shell", "host_shell",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "english": {
         "get_datetime", "save_english_phrase", "search_english_phrases", "get_english_review",
         "record_english_result", "get_english_progress",
         "search_notion", "read_notion_page", "create_notion_page",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "hornbills": {
         "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub", "get_hornbills_destinations",
         "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "cutsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_cutsports_destinations",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "drawsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_drawsports_destinations",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "the_analyst": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_the_analyst_destinations",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "comunidad": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_comunidad_destinations",
-    },
+    } | _ENGLISH_COACH_TOOLS,
     "basketouch_hub": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "get_basketouch_hub_destinations",
         "query_notion_actions", "upsert_notion_action",
-    },
+    } | _ENGLISH_COACH_TOOLS,
 }
 
 
