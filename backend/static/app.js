@@ -90,7 +90,6 @@ let chatList = [];
 let workspaceList = [];
 let projectList = [];
 let currentScope = { workspace_id: 'general', project_id: null, scope_source: 'auto' };
-const recentLimit = 5;
 
 async function loadChatList() {
   try {
@@ -132,14 +131,16 @@ function renderChatList() {
     <div class="space-label">${label}<button onclick="startNewChat('${workspaceId}', ${projectId ? `'${projectId}'` : 'null'})" title="Nueva conversación aquí">＋</button></div>
     <div class="space-chats">${items.length ? items.map(chat).join('') : '<div class="space-empty">Sin conversaciones</div>'}</div>
   </section>`;
-  const recent = chatList.slice(0, recentLimit);
   const spaces = workspaceList.map(w => {
     if (w.id !== 'projects') return section(`${w.icon} ${esc(w.name)}`, inScope(w.id), w.id);
     const projectSections = projectList.map(p => section(esc(p.name), inScope('projects', p.id), 'projects', p.id, 'project')).join('');
     const direct = inScope('projects');
     return `<section class="space-section projects"><div class="space-label">${w.icon} ${esc(w.name)}</div>${direct.length ? `<div class="space-chats">${direct.map(chat).join('')}</div>` : ''}${projectSections}</section>`;
   }).join('');
-  el.innerHTML = (recent.length ? section('Recientes', recent, 'general') : '') + spaces;
+  // A conversation belongs to exactly one workspace. Do not duplicate recent
+  // conversations at the top of the sidebar: that made scoped chats look like
+  // General chats and obscured where they were actually saved.
+  el.innerHTML = spaces;
 }
 
 function openNewChatPicker() {
