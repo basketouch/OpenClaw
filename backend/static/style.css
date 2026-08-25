@@ -173,6 +173,8 @@ header {
   transition: all .15s; font-family: var(--font);
 }
 .btn-icon:hover { color: var(--text); border-color: var(--muted); }
+.voice-mode-btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; }
+.voice-mode-btn.active { border-color: var(--accent); background: rgba(124,58,237,.16); color: #c4b5fd; }
 
 /* ── Chat ── */
 #chat { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }

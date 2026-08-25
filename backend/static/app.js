@@ -11,6 +11,7 @@ let recordingStream = null;
 let audioChunks = [];
 let speakAfterReply = false;
 let activeSpeech = null;
+let voiceMode = localStorage.getItem('oc_voice_mode') === 'on';
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ async function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   await loadChatList();
+  syncVoiceModeUI();
   document.getElementById('msg-input').focus();
   initPush();
 }
@@ -439,8 +441,28 @@ function setVoiceButton(recording = false, working = false) {
   button.classList.toggle('recording', recording);
   button.classList.toggle('working', working);
   button.disabled = working;
-  button.title = recording ? 'Detener dictado' : (working ? 'Transcribiendo…' : 'Dictar un mensaje');
+  button.title = recording ? 'Terminar de hablar' : (working ? 'Transcribiendo…' : (voiceMode ? 'Hablar con Alex' : 'Dictar un mensaje'));
   button.setAttribute('aria-label', button.title);
+}
+
+function toggleVoiceMode() {
+  voiceMode = !voiceMode;
+  localStorage.setItem('oc_voice_mode', voiceMode ? 'on' : 'off');
+  syncVoiceModeUI();
+  if (!voiceMode && activeSpeech && !activeSpeech.paused) {
+    activeSpeech.pause();
+    activeSpeech.currentTime = 0;
+  }
+}
+
+function syncVoiceModeUI() {
+  const button = document.getElementById('voice-mode-btn');
+  if (!button) return;
+  button.classList.toggle('active', voiceMode);
+  button.setAttribute('aria-pressed', String(voiceMode));
+  button.title = voiceMode ? 'Desactivar modo voz' : 'Activar modo voz';
+  button.querySelector('span').textContent = voiceMode ? 'Voz activa' : 'Voz';
+  setVoiceButton();
 }
 
 async function toggleVoiceRecording() {
@@ -496,10 +518,15 @@ async function transcribeRecording() {
     if (!response.ok) throw new Error(result.detail || 'No se pudo transcribir');
     const input = document.getElementById('msg-input');
     input.value = [input.value.trim(), result.text].filter(Boolean).join(input.value.trim() ? ' ' : '');
-    speakAfterReply = true;
     resize(input);
     input.focus();
-    setVoiceStatus('Texto listo para revisar y enviar.');
+    if (voiceMode) {
+      speakAfterReply = true;
+      setVoiceStatus('Enviando a Alex…');
+      await sendMessage();
+    } else {
+      setVoiceStatus('Texto listo para revisar y enviar.');
+    }
   } catch (error) {
     setVoiceStatus(error.message || 'No se pudo transcribir el audio.', true);
   } finally {
@@ -639,14 +666,16 @@ async function sendMessage() {
       history.push({ role: 'assistant', content: responseText });
       await saveCurrentChat();
       renderContextShortcuts(msgText, responseText);
-      if (speakAfterReply) {
-        speakAfterReply = false;
+      const shouldSpeak = speakAfterReply && voiceMode;
+      speakAfterReply = false;
+      if (shouldSpeak) {
         const listenButton = bubble.parentElement.querySelector('.listen-btn');
         if (listenButton) speakBubble(listenButton);
       }
     }
 
   } catch (err) {
+    speakAfterReply = false;
     bubble.classList.remove('cursor');
     bubble.innerHTML = '<span class="err">' + esc(err.message) + '</span>';
   } finally {
