@@ -9,6 +9,8 @@ let nextAssistContext = null;
 let mediaRecorder = null;
 let recordingStream = null;
 let audioChunks = [];
+let speakAfterReply = false;
+let activeSpeech = null;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -494,6 +496,7 @@ async function transcribeRecording() {
     if (!response.ok) throw new Error(result.detail || 'No se pudo transcribir');
     const input = document.getElementById('msg-input');
     input.value = [input.value.trim(), result.text].filter(Boolean).join(input.value.trim() ? ' ' : '');
+    speakAfterReply = true;
     resize(input);
     input.focus();
     setVoiceStatus('Texto listo para revisar y enviar.');
@@ -636,6 +639,11 @@ async function sendMessage() {
       history.push({ role: 'assistant', content: responseText });
       await saveCurrentChat();
       renderContextShortcuts(msgText, responseText);
+      if (speakAfterReply) {
+        speakAfterReply = false;
+        const listenButton = bubble.parentElement.querySelector('.listen-btn');
+        if (listenButton) speakBubble(listenButton);
+      }
     }
 
   } catch (err) {
@@ -968,11 +976,75 @@ function appendAssistantBubble() {
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
           ' Copiar' +
         '</button>' +
+        '<button class="listen-btn" onclick="speakBubble(this)" title="Escuchar respuesta generada por IA">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a10 10 0 010 14"/></svg>' +
+          ' Escuchar <span>· Voz IA</span>' +
+        '</button>' +
       '</div>' +
     '</div>';
   msgs.appendChild(el);
   scrollBottom();
   return el.querySelector('.bubble');
+}
+
+function cleanSpeechText(text) {
+  return String(text)
+    .replace(/```[\s\S]*?```/g, ' He omitido un bloque de código. ')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/[*_#>`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function speakBubble(button) {
+  const bubble = button.closest('.msg-body').querySelector('.bubble');
+  const text = cleanSpeechText(bubble._rawText || bubble.innerText);
+  if (!text) return;
+  if (activeSpeech && !activeSpeech.paused) {
+    activeSpeech.pause();
+    activeSpeech.currentTime = 0;
+  }
+  button.disabled = true;
+  button.classList.add('speaking');
+  setListenLabel(button, 'Preparando…');
+  try {
+    let url = button.dataset.speechUrl;
+    if (!url) {
+      const response = await fetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo generar la voz');
+      }
+      url = URL.createObjectURL(await response.blob());
+      button.dataset.speechUrl = url;
+    }
+    const audio = new Audio(url);
+    activeSpeech = audio;
+    audio.onended = () => resetListenButton(button);
+    audio.onerror = () => resetListenButton(button);
+    await audio.play();
+    setListenLabel(button, 'Detener');
+    button.onclick = () => { audio.pause(); audio.currentTime = 0; resetListenButton(button); };
+  } catch (error) {
+    button.title = error.message || 'No se pudo reproducir la voz';
+    resetListenButton(button);
+  }
+}
+
+function setListenLabel(button, label) {
+  button.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a10 10 0 010 14"/></svg> ' + esc(label) + (label === 'Escuchar' ? ' <span>· Voz IA</span>' : '');
+}
+
+function resetListenButton(button) {
+  if (!button) return;
+  button.disabled = false;
+  button.classList.remove('speaking');
+  button.onclick = () => speakBubble(button);
+  setListenLabel(button, 'Escuchar');
 }
 
 function copyBubble(btn) {

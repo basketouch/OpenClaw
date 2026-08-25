@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     alex_complex_model: str = "gpt-5.6-terra"
     english_model: str = "gpt-5.6-luna"
     transcription_model: str = "gpt-4o-mini-transcribe"
+    tts_model: str = "gpt-4o-mini-tts"
+    tts_voice: str = "marin"
     user_timezone: str = "Europe/Madrid"
 
     workspace_path: str = "/opt/openclaw/workspace"

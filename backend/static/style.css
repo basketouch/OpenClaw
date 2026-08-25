@@ -531,16 +531,18 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
   gap: 6px;
   margin-top: 1px;
 }
-.copy-btn {
+.copy-btn, .listen-btn {
   background: none; border: none; color: var(--muted);
   font-size: 11px; padding: 2px 6px; border-radius: 5px;
   cursor: pointer; display: flex; align-items: center; gap: 4px;
   opacity: 0; transition: opacity .15s, color .15s;
   font-family: var(--font);
 }
-.msg:hover .copy-btn { opacity: 1; }
-.copy-btn:hover { color: var(--text); }
-@media (hover: none) { .copy-btn { opacity: 0.5; } }
+.msg:hover .copy-btn, .msg:hover .listen-btn { opacity: 1; }
+.copy-btn:hover, .listen-btn:hover { color: var(--text); }
+.listen-btn.speaking { color: #a78bfa; opacity: 1; }
+.listen-btn span { color: var(--muted); }
+@media (hover: none) { .copy-btn, .listen-btn { opacity: 0.65; } }
 
 /* ── File attach ── */
 #attach-btn {

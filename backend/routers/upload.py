@@ -3,7 +3,8 @@ import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 from auth import verify_token
 from config import get_openai_client, get_settings
@@ -67,3 +68,33 @@ async def transcribe_audio(file: UploadFile = File(...), _: str = Depends(verify
     if not text:
         raise HTTPException(422, "No se ha podido detectar voz en el audio")
     return {"text": text}
+
+
+class SpeechBody(BaseModel):
+    text: str
+
+
+@router.post("/speech")
+async def create_speech(body: SpeechBody, _: str = Depends(verify_token)):
+    """Return generated speech for a response without retaining an audio file."""
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "No hay texto para leer")
+    if len(text) > 8_000:
+        raise HTTPException(400, "La respuesta es demasiado larga para leerla de una vez")
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(503, "La voz no está configurada")
+    try:
+        result = await get_openai_client().audio.speech.create(
+            model=settings.tts_model,
+            voice=settings.tts_voice,
+            input=text,
+            response_format="mp3",
+            instructions="Habla de forma natural, calmada y clara. Respeta el idioma del texto.",
+        )
+        audio = await result.read()
+    except Exception as exc:
+        raise HTTPException(502, "No se pudo generar la respuesta de voz") from exc
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
