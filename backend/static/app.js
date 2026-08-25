@@ -283,6 +283,7 @@ function toggleScopePicker() {
   ).join('');
   el.innerHTML = `<div class="scope-picker-title">Mover esta conversación a…</div>${workspaces}<div class="new-chat-picker-divider">Projects</div>${projects}`;
   el.classList.remove('hidden');
+  if (window.innerWidth <= 768) openSidebar();
 }
 
 async function moveCurrentChat(workspaceId, projectId) {
