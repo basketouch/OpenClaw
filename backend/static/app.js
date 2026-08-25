@@ -888,7 +888,9 @@ document.getElementById('password-input').addEventListener('keydown', function(e
 init();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function() {});
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+    .then(function(registration) { return registration.update(); })
+    .catch(function() {});
 }
 
 function toggleSection(title) {
