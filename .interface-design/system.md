@@ -21,14 +21,14 @@ and reliable rather than like a generic assistant demo.
 
 - The message field is the primary work surface. Audio and attachment controls
   sit alongside it, never behind a separate screen.
-- Voice has two explicit speeds:
-  - **Dictation (default):** record, transcribe to editable text, then send.
-  - **Voice mode:** user enables the clearly labelled `Voz activa` control;
-    recorded speech is sent automatically and Alex reads the reply aloud.
+- Voice uses one WhatsApp-style microphone gesture instead of a persistent
+  mode: a brief touch starts reviewed dictation; holding for 0.35 seconds starts
+  a voice turn, releasing sends it and Alex reads the reply aloud. Sliding away
+  before release cancels the voice turn.
 - Every voice turn remains visible as text in the chat. Generated speech is
   always labelled `Voz IA` and may be replayed or stopped by the user.
-- A user disabling voice mode immediately returns to reviewed dictation and
-  stops current speech.
+- Reviewed dictation never plays speech automatically; it stays editable until
+  the user chooses to send it.
 
 ## Reusable patterns
 

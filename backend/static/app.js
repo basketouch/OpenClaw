@@ -11,7 +11,12 @@ let recordingStream = null;
 let audioChunks = [];
 let speakAfterReply = false;
 let activeSpeech = null;
-let voiceMode = localStorage.getItem('oc_voice_mode') === 'on';
+let voicePressTimer = null;
+let voiceHoldActive = false;
+let voiceReleasePending = false;
+let voiceCancelPending = false;
+let voiceStartPoint = null;
+let voiceStartRequest = 0;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +73,7 @@ async function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   await loadChatList();
-  syncVoiceModeUI();
+  initVoiceControls();
   document.getElementById('msg-input').focus();
   initPush();
 }
@@ -441,28 +446,87 @@ function setVoiceButton(recording = false, working = false) {
   button.classList.toggle('recording', recording);
   button.classList.toggle('working', working);
   button.disabled = working;
-  button.title = recording ? 'Terminar de hablar' : (working ? 'Transcribiendo…' : (voiceMode ? 'Hablar con Alex' : 'Dictar un mensaje'));
+  button.title = recording ? 'Grabando…' : (working ? 'Transcribiendo…' : 'Toca para dictar · Mantén para hablar con Alex');
   button.setAttribute('aria-label', button.title);
 }
 
-function toggleVoiceMode() {
-  voiceMode = !voiceMode;
-  localStorage.setItem('oc_voice_mode', voiceMode ? 'on' : 'off');
-  syncVoiceModeUI();
-  if (!voiceMode && activeSpeech && !activeSpeech.paused) {
-    activeSpeech.pause();
-    activeSpeech.currentTime = 0;
+function initVoiceControls() {
+  const button = document.getElementById('voice-btn');
+  if (!button || button.dataset.voiceBound) return;
+  button.dataset.voiceBound = 'true';
+  button.addEventListener('pointerdown', onVoicePointerDown);
+  button.addEventListener('pointermove', onVoicePointerMove);
+  button.addEventListener('pointerup', onVoicePointerUp);
+  button.addEventListener('pointercancel', onVoicePointerCancel);
+}
+
+function isRecordingVoice() {
+  return mediaRecorder && mediaRecorder.state === 'recording';
+}
+
+function onVoicePointerDown(event) {
+  if (event.button !== undefined && event.button !== 0) return;
+  const button = event.currentTarget;
+  if (button.disabled) return;
+  event.preventDefault();
+  button.setPointerCapture?.(event.pointerId);
+  voiceStartPoint = { x: event.clientX, y: event.clientY };
+  voiceCancelPending = false;
+  voiceReleasePending = false;
+
+  if (isRecordingVoice()) {
+    voiceHoldActive = true;
+    return;
+  }
+
+  voiceHoldActive = false;
+  voicePressTimer = window.setTimeout(() => {
+    voicePressTimer = null;
+    voiceHoldActive = true;
+    startVoiceRecording(true);
+  }, 350);
+}
+
+function onVoicePointerMove(event) {
+  if (!voiceHoldActive || !voiceStartPoint) return;
+  const distance = Math.hypot(event.clientX - voiceStartPoint.x, event.clientY - voiceStartPoint.y);
+  if (distance > 64 && !voiceCancelPending) {
+    voiceCancelPending = true;
+    setVoiceStatus('Suelta para cancelar el mensaje de voz.');
   }
 }
 
-function syncVoiceModeUI() {
-  const button = document.getElementById('voice-mode-btn');
-  if (!button) return;
-  button.classList.toggle('active', voiceMode);
-  button.setAttribute('aria-pressed', String(voiceMode));
-  button.title = voiceMode ? 'Desactivar modo voz' : 'Activar modo voz';
-  button.querySelector('span').textContent = voiceMode ? 'Voz activa' : 'Voz';
-  setVoiceButton();
+function resetVoicePress() {
+  if (voicePressTimer) window.clearTimeout(voicePressTimer);
+  voicePressTimer = null;
+  voiceHoldActive = false;
+  voiceStartPoint = null;
+}
+
+function onVoicePointerUp(event) {
+  event.preventDefault();
+  const wasHold = voiceHoldActive;
+  resetVoicePress();
+  if (!wasHold) {
+    toggleVoiceRecording();
+    return;
+  }
+  voiceReleasePending = true;
+  if (voiceCancelPending) {
+    cancelVoiceRecording();
+  } else if (isRecordingVoice()) {
+    mediaRecorder.stop();
+  }
+}
+
+function onVoicePointerCancel(event) {
+  event.preventDefault();
+  const wasHold = voiceHoldActive;
+  resetVoicePress();
+  if (wasHold) {
+    voiceCancelPending = true;
+    cancelVoiceRecording();
+  }
 }
 
 async function toggleVoiceRecording() {
@@ -470,21 +534,38 @@ async function toggleVoiceRecording() {
     mediaRecorder.stop();
     return;
   }
+  await startVoiceRecording(false);
+}
+
+async function startVoiceRecording(sendAutomatically) {
   if (!navigator.mediaDevices || !window.MediaRecorder) {
     setVoiceStatus('La grabación no está disponible en este navegador.', true);
     return;
   }
   try {
-    recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const requestId = ++voiceStartRequest;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (requestId !== voiceStartRequest) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    recordingStream = stream;
     audioChunks = [];
     const preferredType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm']
       .find(type => MediaRecorder.isTypeSupported(type));
-    mediaRecorder = preferredType ? new MediaRecorder(recordingStream, { mimeType: preferredType }) : new MediaRecorder(recordingStream);
-    mediaRecorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
-    mediaRecorder.onstop = transcribeRecording;
-    mediaRecorder.start();
+    const recorder = preferredType ? new MediaRecorder(recordingStream, { mimeType: preferredType }) : new MediaRecorder(recordingStream);
+    recorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
+    recorder.onstop = () => transcribeRecording(sendAutomatically);
+    mediaRecorder = recorder;
+    recorder.start();
     setVoiceButton(true);
-    setVoiceStatus('● Escuchando… Toca el micrófono al terminar.');
+    setVoiceStatus(sendAutomatically
+      ? '● Escuchando… Suelta para enviar · desliza para cancelar.'
+      : '● Escuchando… Toca otra vez al terminar.');
+    if (sendAutomatically && voiceReleasePending) {
+      if (voiceCancelPending) cancelVoiceRecording();
+      else recorder.stop();
+    }
   } catch (error) {
     const denied = error && error.name === 'NotAllowedError';
     setVoiceStatus(denied ? 'Necesitas permitir el micrófono para dictar.' : 'No se ha podido iniciar el micrófono.', true);
@@ -492,12 +573,33 @@ async function toggleVoiceRecording() {
   }
 }
 
+function cancelVoiceRecording() {
+  voiceStartRequest += 1;
+  voiceReleasePending = false;
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    const recorder = mediaRecorder;
+    recorder.onstop = () => {
+      if (mediaRecorder === recorder) mediaRecorder = null;
+      audioChunks = [];
+      stopRecordingTracks();
+      setVoiceButton();
+      setVoiceStatus('Mensaje de voz cancelado.');
+    };
+    recorder.stop();
+    return;
+  }
+  audioChunks = [];
+  stopRecordingTracks();
+  setVoiceButton();
+  setVoiceStatus('Mensaje de voz cancelado.');
+}
+
 function stopRecordingTracks() {
   if (recordingStream) recordingStream.getTracks().forEach(track => track.stop());
   recordingStream = null;
 }
 
-async function transcribeRecording() {
+async function transcribeRecording(sendAutomatically = false) {
   const type = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'audio/webm';
   const extension = type.includes('mp4') ? 'm4a' : 'webm';
   const audio = new Blob(audioChunks, { type });
@@ -520,7 +622,7 @@ async function transcribeRecording() {
     input.value = [input.value.trim(), result.text].filter(Boolean).join(input.value.trim() ? ' ' : '');
     resize(input);
     input.focus();
-    if (voiceMode) {
+    if (sendAutomatically) {
       speakAfterReply = true;
       setVoiceStatus('Enviando a Alex…');
       await sendMessage();
@@ -666,7 +768,7 @@ async function sendMessage() {
       history.push({ role: 'assistant', content: responseText });
       await saveCurrentChat();
       renderContextShortcuts(msgText, responseText);
-      const shouldSpeak = speakAfterReply && voiceMode;
+      const shouldSpeak = speakAfterReply;
       speakAfterReply = false;
       if (shouldSpeak) {
         const listenButton = bubble.parentElement.querySelector('.listen-btn');
