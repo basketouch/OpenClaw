@@ -17,11 +17,36 @@ def _load_vapid() -> dict:
         return {}
 
 
+def _has_valid_vapid_private_key(data: dict) -> bool:
+    """Reject malformed persisted keys before attempting to send a push."""
+    private_key = data.get("private")
+    public_key = data.get("public")
+    if not isinstance(private_key, str) or not isinstance(public_key, str):
+        return False
+    try:
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
+        load_pem_private_key(private_key.encode(), password=None)
+        return True
+    except Exception:
+        return False
+
+
+def _clear_subscriptions() -> None:
+    """A regenerated VAPID key requires clients to create new subscriptions."""
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_SUBS_FILE, "w") as f:
+        json.dump([], f)
+
+
 def get_or_create_vapid() -> tuple[str, str]:
     """Returns (public_key_base64url, private_key_pem)."""
     data = _load_vapid()
-    if data.get("public") and data.get("private"):
+    if _has_valid_vapid_private_key(data):
         return data["public"], data["private"]
+
+    if data:
+        log.warning("Invalid VAPID key detected; regenerating it and clearing old subscriptions")
+        _clear_subscriptions()
 
     from py_vapid import Vapid
     from cryptography.hazmat.primitives.serialization import (
