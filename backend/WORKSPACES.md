@@ -72,6 +72,20 @@ record's properties remains separate from its page content. Creating a new
 page and turning a note into a task still require confirmation, so an ambiguous
 conversation cannot silently create structure or work.
 
+## Deleting and moving Notion blocks
+
+Existing blocks are changed only through a prepared plan. Alex reads the source
+page, names the exact blocks and asks for `PASO 1`; it then repeats the effect
+and asks for `PASO 2` in a separate user message. The plan expires after 15
+minutes and can be cancelled before the second confirmation.
+
+Deleting sends the specified direct blocks to Notion's trash, where they remain
+recoverable. Notion does not provide a direct API move for ordinary blocks, so
+OpenClaw moves only compatible simple blocks by copying them to the destination
+first and sending the originals to the trash only after the second confirmation.
+Nested or unsupported blocks are left untouched and require a manual move in
+Notion.
+
 ## Product project contexts
 
 CutSports and DrawSports use independent restricted tool profiles and safe,

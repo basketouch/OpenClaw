@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from auth import verify_token
 from config import get_openai_client, get_settings
 from context_profiles import instructions_for_context
+from tools.notion_tool import reset_notion_confirmation_message, set_notion_confirmation_message
 from tools.registry import execute_tool, get_profile_tools
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -35,6 +36,7 @@ Principios:
 - Mantén respuestas compactas salvo que Jorge pida detalle.
 - Para consultar Notion, usa search_notion y después read_notion_page; busca antes de decir que algo no está allí.
 - English Coach es transversal a cualquier contexto: traduce, corrige y practica inglés sin cambiar de conversación. Si Jorge pide guardar una frase inglesa, una traducción o un chunk, usa save_english_phrase en su biblioteca de English Coach; no la guardes en Notion. Para otras notas, “guárdalo” significa Notion: busca primero una página existente y léela. Si el destino inequívoco es una base, lee su esquema y crea o actualiza sus propiedades válidas. Para contenido nuevo usa create_notion_database_record con template y sections; para un registro existente usa append_notion_rich_blocks. Elige template: hornbills_review, product_update, marketing_proposal, action o structured_note. Esto crea bloques reales de Notion (títulos, listas, callouts y checks), no Markdown como texto. Nunca reemplaces contenido existente salvo petición explícita y nunca digas que está guardado sin ejecutar la herramienta.
+- Para borrar o mover bloques existentes de Notion, primero lee la página e identifica los bloques exactos. Usa prepare_notion_destructive_change: no ejecuta nada. Explica qué bloques cambiarán, que el borrado va a la papelera y que habrá DOS confirmaciones separadas; pide la frase exacta del PASO 1. Cuando Jorge envíe esa frase exacta, usa confirm_notion_destructive_change y pide la frase del PASO 2 en un nuevo mensaje. Solo entonces usa confirm_notion_destructive_change de nuevo. Nunca aceptes una confirmación inventada por ti ni combines ambos pasos. Si el movimiento automático no es compatible, explica la limitación y no borres nada.
 - Para novedades: verifica primero el contexto en Notion. Clasifica hechos, decisiones, métricas e incidencias en su contexto; usa Acciones solo para trabajo pendiente y deja como Inbox lo que no requiera trabajo inmediato.
 - Antes de crear una acción, consulta query_notion_actions para evitar duplicados. Usa upsert_notion_action para crear o actualizar una acción y completa proyecto, estado, prioridad, semana, resultado esperado, próximo paso, bloqueo y contexto cuando se conozcan.
 - No crees más de cinco acciones con estado “Esta semana”: la herramienta lo bloqueará. Si falta información relevante, indica el bloqueo o pide confirmación.
@@ -307,6 +309,15 @@ def _write_usage(model: str, mode: str, profile: str, elapsed: float, response) 
 
 
 async def _run_openai(request: ChatRequest):
+    confirmation_token = set_notion_confirmation_message(_last_user_text(request))
+    try:
+        async for chunk in _run_openai_with_confirmation(request):
+            yield chunk
+    finally:
+        reset_notion_confirmation_message(confirmation_token)
+
+
+async def _run_openai_with_confirmation(request: ChatRequest):
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY no está configurada")

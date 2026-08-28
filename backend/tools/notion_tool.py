@@ -1,4 +1,9 @@
+import contextvars
+import json
+import os
 import re
+import secrets
+import time
 from datetime import date
 from typing import Any
 
@@ -8,6 +13,20 @@ from config import get_settings
 
 _NOTION_API = "https://api.notion.com/v1"
 _NOTION_VERSION = "2026-03-11"
+_DESTRUCTIVE_PLANS_PATH = "/data/notion_destructive_plans.json"
+_DESTRUCTIVE_PLAN_TTL_SECONDS = 15 * 60
+_active_confirmation_message: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "active_notion_confirmation_message", default=""
+)
+
+
+def set_notion_confirmation_message(message: str):
+    """Bind destructive-tool confirmation to the current user's actual message."""
+    return _active_confirmation_message.set(message or "")
+
+
+def reset_notion_confirmation_message(token) -> None:
+    _active_confirmation_message.reset(token)
 
 
 def _headers() -> dict[str, str]:
@@ -375,6 +394,199 @@ async def append_notion_rich_blocks(
     return {"ok": True, "appended": len(rich_blocks), "page_id": page_id, "result": result}
 
 
+def _load_destructive_plans() -> dict[str, Any]:
+    try:
+        with open(_DESTRUCTIVE_PLANS_PATH, encoding="utf-8") as file:
+            data = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    now = time.time()
+    plans = {plan_id: plan for plan_id, plan in data.items() if plan.get("expires_at", 0) > now}
+    if plans != data:
+        _save_destructive_plans(plans)
+    return plans
+
+
+def _save_destructive_plans(plans: dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(_DESTRUCTIVE_PLANS_PATH), exist_ok=True)
+    temporary = f"{_DESTRUCTIVE_PLANS_PATH}.{secrets.token_hex(4)}.tmp"
+    with open(temporary, "w", encoding="utf-8") as file:
+        json.dump(plans, file, ensure_ascii=False)
+    os.replace(temporary, _DESTRUCTIVE_PLANS_PATH)
+
+
+def _block_preview(block: dict[str, Any]) -> dict[str, Any]:
+    block_type = block.get("type", "unknown")
+    value = block.get(block_type, {})
+    text = _plain_text(value.get("rich_text"))
+    return {
+        "id": block.get("id"),
+        "type": block_type,
+        "text": text[:240],
+        "has_children": bool(block.get("has_children", False)),
+    }
+
+
+def _direct_child_of_page(block: dict[str, Any], source_page_id: str) -> bool:
+    parent = block.get("parent") or {}
+    return parent.get("type") == "page_id" and parent.get("page_id") == source_page_id
+
+
+def _move_spec_from_block(block: dict[str, Any], rows: list[list[str]] | None = None) -> dict[str, Any]:
+    """Copy only simple API-supported blocks; complex/nested blocks remain manual moves."""
+    block_type = block.get("type", "")
+    if block.get("has_children") and block_type != "table":
+        raise ValueError("los bloques con contenido anidado no se pueden mover automáticamente")
+    if block_type == "divider":
+        return {"type": "divider"}
+    if block_type == "table":
+        if not rows:
+            raise ValueError("la tabla no tiene filas que se puedan copiar")
+        value = block.get("table", {})
+        return {
+            "type": "table", "rows": rows,
+            "has_column_header": bool(value.get("has_column_header", False)),
+            "has_row_header": bool(value.get("has_row_header", False)),
+        }
+    if block_type not in _RICH_BLOCK_TYPES:
+        raise ValueError(f"el tipo {block_type or 'unknown'} no se puede mover automáticamente")
+    value = block.get(block_type, {})
+    text = _plain_text(value.get("rich_text"))
+    if not text:
+        raise ValueError("el bloque no contiene texto que se pueda copiar")
+    spec: dict[str, Any] = {"type": block_type, "text": text}
+    if block_type == "to_do":
+        spec["checked"] = bool(value.get("checked", False))
+    if block_type == "callout":
+        icon = (value.get("icon") or {}).get("emoji")
+        if icon:
+            spec["icon"] = icon
+        spec["color"] = value.get("color", "blue_background")
+    return spec
+
+
+async def _plan_move_specs(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    specs = []
+    for block in blocks:
+        rows = None
+        if block.get("type") == "table":
+            response = await _request("GET", f"/blocks/{block['id']}/children?page_size=100")
+            rows = [
+                [_plain_text(cell) for cell in row.get("table_row", {}).get("cells", [])]
+                for row in response.get("results", [])
+                if row.get("type") == "table_row"
+            ]
+        specs.append(_move_spec_from_block(block, rows))
+    return specs
+
+
+async def prepare_notion_destructive_change(
+    operation: str, source_page_id: str, block_ids: list[str], target_page_id: str = "",
+    reason: str = "",
+) -> dict:
+    """Prepare—not execute—a deletion or block move that requires two user confirmations."""
+    if operation not in {"delete_blocks", "move_blocks"}:
+        return {"ok": False, "error": "operación no válida"}
+    if not source_page_id or not block_ids or len(block_ids) > 20:
+        return {"ok": False, "error": "indica una página origen y entre 1 y 20 bloques"}
+    if operation == "move_blocks" and not target_page_id:
+        return {"ok": False, "error": "mover bloques requiere una página destino"}
+    if operation == "move_blocks" and target_page_id == source_page_id:
+        return {"ok": False, "error": "el destino debe ser distinto del origen"}
+
+    source_page = await _request("GET", f"/pages/{source_page_id}")
+    if operation == "move_blocks":
+        await _request("GET", f"/pages/{target_page_id}")
+    source_blocks = [await _request("GET", f"/blocks/{block_id}") for block_id in block_ids]
+    if any(not _direct_child_of_page(block, source_page_id) for block in source_blocks):
+        return {"ok": False, "error": "solo se pueden gestionar bloques directos de la página origen"}
+
+    move_specs = []
+    if operation == "move_blocks":
+        try:
+            move_specs = await _plan_move_specs(source_blocks)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    plan_id = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:10].upper()
+    plans = _load_destructive_plans()
+    plans[plan_id] = {
+        "operation": operation,
+        "source_page_id": source_page_id,
+        "target_page_id": target_page_id,
+        "block_ids": block_ids,
+        "move_specs": move_specs,
+        "reason": reason.strip(),
+        "state": "awaiting_first_confirmation",
+        "created_at": time.time(),
+        "expires_at": time.time() + _DESTRUCTIVE_PLAN_TTL_SECONDS,
+    }
+    _save_destructive_plans(plans)
+    verb = "mandar a la papelera" if operation == "delete_blocks" else "copiar al destino y mandar los originales a la papelera"
+    return {
+        "ok": True,
+        "prepared": True,
+        "plan_id": plan_id,
+        "source_page": _page_summary(source_page),
+        "operation": operation,
+        "effect": verb,
+        "reason": reason.strip(),
+        "blocks": [_block_preview(block) for block in source_blocks],
+        "first_confirmation": f"CONFIRMAR {plan_id} PASO 1",
+        "second_confirmation": f"CONFIRMAR {plan_id} PASO 2",
+        "expires_in_minutes": _DESTRUCTIVE_PLAN_TTL_SECONDS // 60,
+    }
+
+
+def _has_current_confirmation(plan_id: str, step: int) -> bool:
+    expected = f"confirmar {plan_id} paso {step}".casefold()
+    actual = " ".join(_active_confirmation_message.get().split()).casefold()
+    return actual == expected
+
+
+async def confirm_notion_destructive_change(plan_id: str) -> dict:
+    """Advance or execute a prepared plan only when the exact user confirmation is present."""
+    plans = _load_destructive_plans()
+    plan = plans.get(plan_id)
+    if not plan:
+        return {"ok": False, "error": "plan inexistente o caducado; prepara uno nuevo"}
+    if plan["state"] == "awaiting_first_confirmation":
+        if not _has_current_confirmation(plan_id, 1):
+            return {"ok": False, "error": f"falta la primera confirmación exacta: CONFIRMAR {plan_id} PASO 1"}
+        plan["state"] = "awaiting_second_confirmation"
+        _save_destructive_plans(plans)
+        return {
+            "ok": True, "first_confirmation_recorded": True,
+            "message": "Primera confirmación registrada. Explica de nuevo el efecto y pide la segunda confirmación en un mensaje separado.",
+            "second_confirmation": f"CONFIRMAR {plan_id} PASO 2",
+        }
+    if plan["state"] != "awaiting_second_confirmation":
+        return {"ok": False, "error": "el plan no está listo para confirmar"}
+    if not _has_current_confirmation(plan_id, 2):
+        return {"ok": False, "error": f"falta la segunda confirmación exacta: CONFIRMAR {plan_id} PASO 2"}
+
+    if plan["operation"] == "move_blocks":
+        await _request("PATCH", f"/blocks/{plan['target_page_id']}/children", {"children": [_normalise_rich_block(spec) for spec in plan["move_specs"]]})
+    results = [await _request("DELETE", f"/blocks/{block_id}") for block_id in plan["block_ids"]]
+    plans.pop(plan_id, None)
+    _save_destructive_plans(plans)
+    return {
+        "ok": True, "executed": True, "operation": plan["operation"],
+        "trashed_blocks": len(results), "target_page_id": plan.get("target_page_id") or None,
+        "message": "Operación terminada. Los bloques originales están en la papelera de Notion y se pueden restaurar.",
+    }
+
+
+async def cancel_notion_destructive_change(plan_id: str) -> dict:
+    """Cancel a prepared destructive plan before its second confirmation."""
+    plans = _load_destructive_plans()
+    if plan_id not in plans:
+        return {"ok": False, "error": "plan inexistente o ya finalizado"}
+    plans.pop(plan_id, None)
+    _save_destructive_plans(plans)
+    return {"ok": True, "cancelled": True}
+
+
 async def create_notion_database_record(
     data_source_id: str, title: str, content: str = "", fields: dict[str, Any] | None = None,
     template: str = "", sections: dict[str, Any] | None = None, blocks: list[dict[str, Any]] | None = None,
@@ -585,6 +797,42 @@ APPEND_RICH_BLOCKS_DEF = {
             },
         },
         "required": ["page_id"],
+    },
+}
+
+PREPARE_DESTRUCTIVE_CHANGE_DEF = {
+    "name": "prepare_notion_destructive_change",
+    "description": "PREPARA, pero nunca ejecuta, el borrado o movimiento de bloques directos de una página de Notion. Úsala solo después de leer la página y de que Jorge haya indicado exactamente qué bloques quiere cambiar. Tras prepararla, explica el efecto y que habrá DOS confirmaciones separadas; muestra la primera frase exacta devuelta. Para mover, los bloques compatibles se copian al destino y los originales se mandan a la papelera solo tras la segunda confirmación.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "operation": {"type": "string", "enum": ["delete_blocks", "move_blocks"]},
+            "source_page_id": {"type": "string"},
+            "block_ids": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "string"}},
+            "target_page_id": {"type": "string", "description": "Obligatorio para move_blocks."},
+            "reason": {"type": "string", "description": "Motivo breve que se mostrará a Jorge."},
+        },
+        "required": ["operation", "source_page_id", "block_ids"],
+    },
+}
+
+CONFIRM_DESTRUCTIVE_CHANGE_DEF = {
+    "name": "confirm_notion_destructive_change",
+    "description": "Registra la primera confirmación o ejecuta la segunda de un cambio de bloques ya preparado. Llámala SOLO cuando el último mensaje de Jorge sea exactamente la frase de confirmación devuelta por el plan. La primera no cambia Notion: vuelve a explicar el efecto y pide la segunda frase en un mensaje separado. La segunda realiza el cambio.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"plan_id": {"type": "string"}},
+        "required": ["plan_id"],
+    },
+}
+
+CANCEL_DESTRUCTIVE_CHANGE_DEF = {
+    "name": "cancel_notion_destructive_change",
+    "description": "Cancela un borrado o movimiento de bloques que estaba preparado y todavía no se ha ejecutado. Úsala si Jorge cancela o cambia de idea.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"plan_id": {"type": "string"}},
+        "required": ["plan_id"],
     },
 }
 
