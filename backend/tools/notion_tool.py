@@ -104,9 +104,12 @@ async def search_notion(query: str, limit: int = 10) -> dict:
     return {"count": len(items), "items": items}
 
 
-async def read_notion_page(page_id: str, max_blocks: int = 100) -> dict:
+async def read_notion_page(page_id: str, max_blocks: int = 100, start_cursor: str = "") -> dict:
     page = await _request("GET", f"/pages/{page_id}")
-    blocks = await _request("GET", f"/blocks/{page_id}/children?page_size={max(1, min(100, max_blocks))}")
+    query = f"page_size={max(1, min(100, max_blocks))}"
+    if start_cursor.strip():
+        query += f"&start_cursor={start_cursor.strip()}"
+    blocks = await _request("GET", f"/blocks/{page_id}/children?{query}")
     content = []
     structured_blocks = []
     for block in blocks.get("results", []):
@@ -141,7 +144,7 @@ async def read_notion_page(page_id: str, max_blocks: int = 100) -> dict:
         structured_blocks.append(item)
     return {
         "page": _page_summary(page), "content": content, "blocks": structured_blocks,
-        "has_more": bool(blocks.get("has_more")),
+        "has_more": bool(blocks.get("has_more")), "next_cursor": blocks.get("next_cursor"),
     }
 
 
@@ -758,8 +761,8 @@ SEARCH_DEF = {
 
 READ_DEF = {
     "name": "read_notion_page",
-    "description": "Lee una página de Notion por su id después de localizarla con search_notion.",
-    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "max_blocks": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["page_id"]},
+    "description": "Lee una página de Notion por su id después de localizarla con search_notion. Si devuelve has_more=true, vuelve a llamarla con next_cursor para leer la siguiente tanda de bloques.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "max_blocks": {"type": "integer", "minimum": 1, "maximum": 100}, "start_cursor": {"type": "string", "description": "Cursor next_cursor devuelto por una lectura anterior de la misma página."}}, "required": ["page_id"]},
 }
 
 CREATE_PAGE_DEF = {

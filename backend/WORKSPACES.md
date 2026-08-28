@@ -79,6 +79,10 @@ page, names the exact blocks and asks for `PASO 1`; it then repeats the effect
 and asks for `PASO 2` in a separate user message. The plan expires after 15
 minutes and can be cancelled before the second confirmation.
 
+Page reads are paginated: when a response reports `has_more`, Alex follows its
+`next_cursor` before deciding that it has seen the full page or before preparing
+a block change.
+
 Deleting sends the specified direct blocks to Notion's trash, where they remain
 recoverable. Notion does not provide a direct API move for ordinary blocks, so
 OpenClaw moves only compatible simple blocks by copying them to the destination
