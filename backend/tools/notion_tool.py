@@ -34,6 +34,19 @@ def _plain_text(parts: list[dict] | None) -> str:
     return "".join(part.get("plain_text", "") for part in (parts or []))
 
 
+def _rich_text(value: str, link: str = "") -> list[dict]:
+    """Build Notion rich text safely, splitting values at the API text limit."""
+    value = str(value or "")
+    chunks = [value[index:index + 2000] for index in range(0, len(value), 2000)] or []
+    parts = []
+    for chunk in chunks:
+        text: dict[str, Any] = {"content": chunk}
+        if link:
+            text["link"] = {"url": link}
+        parts.append({"type": "text", "text": text})
+    return parts
+
+
 def _page_summary(item: dict) -> dict:
     properties = item.get("properties") or {}
     title = "Sin título"
@@ -76,31 +89,60 @@ async def read_notion_page(page_id: str, max_blocks: int = 100) -> dict:
     page = await _request("GET", f"/pages/{page_id}")
     blocks = await _request("GET", f"/blocks/{page_id}/children?page_size={max(1, min(100, max_blocks))}")
     content = []
+    structured_blocks = []
     for block in blocks.get("results", []):
         block_type = block.get("type", "unknown")
         value = block.get(block_type, {})
         text = _plain_text(value.get("rich_text"))
+        item: dict[str, Any] = {"id": block.get("id"), "type": block_type}
         if text:
             content.append({"type": block_type, "text": text})
-    return {"page": _page_summary(page), "content": content, "has_more": bool(blocks.get("has_more"))}
+            item["text"] = text
+        if block_type == "to_do":
+            item["checked"] = bool(value.get("checked", False))
+        if block_type == "callout":
+            item["color"] = value.get("color", "default")
+        if block_type == "table" and block.get("has_children"):
+            rows = await _request("GET", f"/blocks/{block['id']}/children?page_size=100")
+            item["rows"] = [
+                [_plain_text(cell) for cell in row.get("table_row", {}).get("cells", [])]
+                for row in rows.get("results", [])
+                if row.get("type") == "table_row"
+            ]
+        elif block.get("has_children"):
+            children = await _request("GET", f"/blocks/{block['id']}/children?page_size=50")
+            item["children"] = [
+                {
+                    "id": child.get("id"),
+                    "type": child.get("type", "unknown"),
+                    "text": _plain_text(child.get(child.get("type", ""), {}).get("rich_text")),
+                }
+                for child in children.get("results", [])
+            ]
+        structured_blocks.append(item)
+    return {
+        "page": _page_summary(page), "content": content, "blocks": structured_blocks,
+        "has_more": bool(blocks.get("has_more")),
+    }
 
 
-async def create_notion_page(parent_page_id: str, title: str, content: str = "") -> dict:
-    """Create a child page. It never overwrites or deletes existing Notion content."""
+async def create_notion_page(
+    parent_page_id: str, title: str, content: str = "", template: str = "",
+    sections: dict[str, Any] | None = None, blocks: list[dict[str, Any]] | None = None,
+) -> dict:
+    """Create a child page with optional rich blocks; never overwrites existing content."""
     title = title.strip()
     if not title:
         return {"ok": False, "error": "title vacío"}
-    children = []
-    for paragraph in [part.strip() for part in content.split("\n\n") if part.strip()]:
-        children.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"type": "text", "text": {"content": paragraph}}]}})
+    children = _rich_blocks(content, template, sections, blocks)
     payload: dict[str, Any] = {
         "parent": {"type": "page_id", "page_id": parent_page_id},
-        "properties": {"title": {"title": [{"type": "text", "text": {"content": title}}]}},
+        "properties": {"title": {"title": _rich_text(title)}},
     }
     if children:
         payload["children"] = children[:100]
     page = await _request("POST", "/pages", payload)
-    return {"ok": True, "page": _page_summary(page)}
+    return {"ok": True, "page": _page_summary(page), "blocks_created": len(children)}
 
 
 async def get_hornbills_hub() -> dict:
@@ -177,24 +219,179 @@ def _database_properties(schema: dict[str, str], title: str | None, fields: dict
     return result
 
 
+_RICH_BLOCK_TYPES = {
+    "paragraph", "heading_1", "heading_2", "heading_3", "bulleted_list_item",
+    "numbered_list_item", "to_do", "quote", "callout", "divider", "table",
+}
+_NOTION_COLORS = {
+    "default", "gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red",
+    "gray_background", "brown_background", "orange_background", "yellow_background",
+    "green_background", "blue_background", "purple_background", "pink_background", "red_background",
+}
+_TEMPLATE_SECTIONS = {
+    "hornbills_review": [
+        ("Resumen", "summary", "callout"),
+        ("Hallazgos", "findings", "bulleted_list_item"),
+        ("Hipótesis por validar", "hypotheses", "bulleted_list_item"),
+        ("Preguntas técnicas", "questions", "bulleted_list_item"),
+        ("Implicaciones para coaching", "implications", "bulleted_list_item"),
+        ("Próximo paso", "next_step", "to_do"),
+    ],
+    "product_update": [
+        ("Contexto", "context", "paragraph"),
+        ("Decisión", "decision", "callout"),
+        ("Estado", "status", "paragraph"),
+        ("Trabajo pendiente", "pending_work", "to_do"),
+    ],
+    "marketing_proposal": [
+        ("Objetivo", "objective", "paragraph"),
+        ("Audiencia", "audience", "paragraph"),
+        ("Mensaje", "message", "paragraph"),
+        ("Canal", "channel", "bulleted_list_item"),
+        ("Métricas", "metrics", "bulleted_list_item"),
+        ("Siguiente decisión", "next_decision", "to_do"),
+    ],
+    "action": [
+        ("Resultado esperado", "expected_result", "paragraph"),
+        ("Próximo paso", "next_step", "to_do"),
+        ("Bloqueo", "blocker", "callout"),
+    ],
+    "structured_note": [
+        ("Resumen", "summary", "callout"),
+        ("Contexto", "context", "paragraph"),
+        ("Decisiones", "decisions", "bulleted_list_item"),
+        ("Siguientes pasos", "next_steps", "to_do"),
+    ],
+}
+
+
+def _section_values(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value is None:
+        return []
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _normalise_rich_block(spec: dict[str, Any]) -> dict[str, Any]:
+    """Turn a constrained, model-friendly block spec into a Notion API block."""
+    block_type = str(spec.get("type", "")).strip()
+    if block_type not in _RICH_BLOCK_TYPES:
+        raise ValueError(f"tipo de bloque no permitido: {block_type}")
+    if block_type == "divider":
+        return {"object": "block", "type": "divider", "divider": {}}
+    if block_type == "table":
+        rows = spec.get("rows")
+        if not isinstance(rows, list) or not rows or not all(isinstance(row, list) and row for row in rows):
+            raise ValueError("una tabla necesita rows con al menos una celda por fila")
+        width = len(rows[0])
+        if width > 20 or any(len(row) != width for row in rows):
+            raise ValueError("las filas de la tabla deben tener el mismo número de celdas (máximo 20)")
+        children = [
+            {
+                "object": "block",
+                "type": "table_row",
+                "table_row": {"cells": [_rich_text(str(cell)) for cell in row]},
+            }
+            for row in rows[:100]
+        ]
+        return {
+            "object": "block", "type": "table",
+            "table": {
+                "table_width": width,
+                "has_column_header": bool(spec.get("has_column_header", False)),
+                "has_row_header": bool(spec.get("has_row_header", False)),
+            },
+            "children": children,
+        }
+
+    text = str(spec.get("text", "")).strip()
+    if not text:
+        raise ValueError(f"el bloque {block_type} necesita texto")
+    value: dict[str, Any] = {"rich_text": _rich_text(text, str(spec.get("url", "")).strip())}
+    if block_type.startswith("heading_"):
+        value["is_toggleable"] = False
+    elif block_type == "to_do":
+        value["checked"] = bool(spec.get("checked", False))
+    elif block_type == "callout":
+        icon = str(spec.get("icon", "💡"))[:8]
+        value["icon"] = {"type": "emoji", "emoji": icon}
+        color = str(spec.get("color", "blue_background"))
+        if color in _NOTION_COLORS:
+            value["color"] = color
+    return {"object": "block", "type": block_type, block_type: value}
+
+
+def _template_blocks(template: str, sections: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    if template not in _TEMPLATE_SECTIONS:
+        raise ValueError("template no válido")
+    sections = sections or {}
+    blocks: list[dict[str, Any]] = []
+    for title, key, block_type in _TEMPLATE_SECTIONS[template]:
+        values = _section_values(sections.get(key))
+        if not values:
+            continue
+        blocks.append(_normalise_rich_block({"type": "heading_2", "text": title}))
+        for value in values:
+            spec: dict[str, Any] = {"type": block_type, "text": value}
+            if block_type == "callout":
+                spec["icon"] = "📌"
+                spec["color"] = "blue_background"
+            blocks.append(_normalise_rich_block(spec))
+    return blocks
+
+
+def _rich_blocks(
+    content: str = "", template: str = "", sections: dict[str, Any] | None = None,
+    blocks: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    if template:
+        result.extend(_template_blocks(template, sections))
+    if content.strip() and not result:
+        result.extend(
+            _normalise_rich_block({"type": "paragraph", "text": paragraph})
+            for paragraph in [part.strip() for part in content.split("\n\n") if part.strip()]
+        )
+    for block in blocks or []:
+        if not isinstance(block, dict):
+            raise ValueError("cada bloque debe ser un objeto")
+        result.append(_normalise_rich_block(block))
+    if len(result) > 100:
+        raise ValueError("máximo 100 bloques por operación")
+    return result
+
+
+async def append_notion_rich_blocks(
+    page_id: str, template: str = "", sections: dict[str, Any] | None = None,
+    blocks: list[dict[str, Any]] | None = None, content: str = "",
+) -> dict:
+    """Append structured blocks safely; this never replaces existing page content."""
+    rich_blocks = _rich_blocks(content, template, sections, blocks)
+    if not rich_blocks:
+        return {"ok": False, "error": "contenido enriquecido vacío"}
+    result = await _request("PATCH", f"/blocks/{page_id}/children", {"children": rich_blocks})
+    return {"ok": True, "appended": len(rich_blocks), "page_id": page_id, "result": result}
+
+
 async def create_notion_database_record(
     data_source_id: str, title: str, content: str = "", fields: dict[str, Any] | None = None,
+    template: str = "", sections: dict[str, Any] | None = None, blocks: list[dict[str, Any]] | None = None,
 ) -> dict:
-    """Create a new Notion database record using only fields in its live schema."""
+    """Create a record with schema-safe properties and optional rich Notion blocks."""
     title = title.strip()
     if not title:
         return {"ok": False, "error": "title vacío"}
     data_source = await _request("GET", f"/data_sources/{data_source_id}")
     properties = _database_properties(_data_source_schema(data_source), title, fields or {})
-    children = []
-    for paragraph in [part.strip() for part in content.split("\n\n") if part.strip()][:100]:
-        children.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": _rich_text(paragraph[:2000])}})
+    children = _rich_blocks(content, template, sections, blocks)
     page = await _request("POST", "/pages", {
         "parent": {"type": "data_source_id", "data_source_id": data_source_id},
         "properties": properties,
         "children": children,
     })
-    return {"ok": True, "page": _page_summary(page)}
+    return {"ok": True, "page": _page_summary(page), "blocks_created": len(children)}
 
 
 async def update_notion_database_record(page_id: str, fields: dict[str, Any]) -> dict:
@@ -268,10 +465,6 @@ async def query_notion_actions(query: str = "", status: str = "", limit: int = 2
     if status:
         actions = [item for item in actions if item["status"].lower() == status.lower()]
     return {"count": len(actions[:max(1, min(100, limit))]), "items": actions[:max(1, min(100, limit))]}
-
-
-def _rich_text(value: str) -> list[dict]:
-    return [{"type": "text", "text": {"content": value}}] if value else []
 
 
 def _action_properties(
@@ -359,8 +552,8 @@ READ_DEF = {
 
 CREATE_PAGE_DEF = {
     "name": "create_notion_page",
-    "description": "Crea una página hija en Notion. Confirma con Jorge antes de crearla salvo que él haya pedido claramente crear esa página concreta.",
-    "input_schema": {"type": "object", "properties": {"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}}, "required": ["parent_page_id", "title"]},
+    "description": "Crea una página hija en Notion con contenido enriquecido opcional. Confirma con Jorge antes de crearla salvo que él haya pedido claramente crear esa página concreta.",
+    "input_schema": {"type": "object", "properties": {"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}, "template": {"type": "string", "enum": ["hornbills_review", "product_update", "marketing_proposal", "action", "structured_note"]}, "sections": {"type": "object", "additionalProperties": {}}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": {}}}}, "required": ["parent_page_id", "title"]},
 }
 
 HORNBILLS_HUB_DEF = {
@@ -375,6 +568,26 @@ APPEND_NOTE_DEF = {
     "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "content": {"type": "string", "description": "Nota concisa, estructurada y sin datos inventados."}}, "required": ["page_id", "content"]},
 }
 
+APPEND_RICH_BLOCKS_DEF = {
+    "name": "append_notion_rich_blocks",
+    "description": "Añade bloques enriquecidos a una página o registro de Notion sin sustituir contenido existente. Lee primero la página. Usa template para una estructura consistente o blocks para títulos, listas, callouts, checks, tablas y enlaces.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "page_id": {"type": "string"},
+            "template": {"type": "string", "enum": ["hornbills_review", "product_update", "marketing_proposal", "action", "structured_note"]},
+            "sections": {"type": "object", "additionalProperties": {}},
+            "content": {"type": "string", "description": "Alternativa simple si no se usa template ni blocks."},
+            "blocks": {
+                "type": "array",
+                "description": "Bloques permitidos: paragraph, heading_1/2/3, bulleted_list_item, numbered_list_item, to_do, quote, callout, divider o table. Las tablas usan rows.",
+                "items": {"type": "object", "additionalProperties": {}},
+            },
+        },
+        "required": ["page_id"],
+    },
+}
+
 READ_DATA_SOURCE_DEF = {
     "name": "read_notion_data_source",
     "description": "Lee el esquema real de una base de datos de Notion antes de crear un registro. Úsala después de localizar la base con search_notion.",
@@ -383,8 +596,20 @@ READ_DATA_SOURCE_DEF = {
 
 CREATE_DATABASE_RECORD_DEF = {
     "name": "create_notion_database_record",
-    "description": "Crea un registro nuevo dentro de una base de datos compartida de Notion. Solo guarda propiedades presentes en su esquema y nunca actualiza ni borra registros existentes.",
-    "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {"type": "string"}}}, "required": ["data_source_id", "title"]},
+    "description": "Crea un registro nuevo dentro de una base de datos compartida de Notion. Lee antes el esquema, guarda solo propiedades válidas y puede crear contenido enriquecido con template o blocks. Nunca modifica ni borra registros existentes.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "data_source_id": {"type": "string"},
+            "title": {"type": "string"},
+            "content": {"type": "string"},
+            "fields": {"type": "object", "additionalProperties": {}},
+            "template": {"type": "string", "enum": ["hornbills_review", "product_update", "marketing_proposal", "action", "structured_note"]},
+            "sections": {"type": "object", "additionalProperties": {}},
+            "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": {}}},
+        },
+        "required": ["data_source_id", "title"],
+    },
 }
 
 UPDATE_DATABASE_RECORD_DEF = {

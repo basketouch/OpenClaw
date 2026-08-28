@@ -48,7 +48,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime",
         "web_search", "list_scheduled_tasks", "create_scheduled_task",
         "delete_scheduled_task", "toggle_scheduled_task",
-        "search_notion", "read_notion_page", "append_notion_note",
+        "search_notion", "read_notion_page", "append_notion_note", "append_notion_rich_blocks",
         "query_notion_actions", "upsert_notion_action",
     } | _ENGLISH_COACH_TOOLS,
     "communications": {
@@ -69,27 +69,27 @@ TOOL_PROFILES: dict[str, set[str]] = {
     } | _ENGLISH_COACH_TOOLS,
     "hornbills": {
         "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub", "get_hornbills_destinations",
-        "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
+        "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "query_notion_actions",
     } | _ENGLISH_COACH_TOOLS,
     "cutsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
-        "create_notion_database_record", "update_notion_database_record", "get_cutsports_destinations",
+        "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_cutsports_destinations",
     } | _ENGLISH_COACH_TOOLS,
     "drawsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
-        "create_notion_database_record", "update_notion_database_record", "get_drawsports_destinations",
+        "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_drawsports_destinations",
     } | _ENGLISH_COACH_TOOLS,
     "the_analyst": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
-        "create_notion_database_record", "update_notion_database_record", "get_the_analyst_destinations",
+        "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_the_analyst_destinations",
     } | _ENGLISH_COACH_TOOLS,
     "comunidad": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
-        "create_notion_database_record", "update_notion_database_record", "get_comunidad_destinations",
+        "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_comunidad_destinations",
     } | _ENGLISH_COACH_TOOLS,
     "basketouch_hub": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
-        "create_notion_database_record", "update_notion_database_record", "get_basketouch_hub_destinations",
+        "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_basketouch_hub_destinations",
         "query_notion_actions", "upsert_notion_action",
     } | _ENGLISH_COACH_TOOLS,
 }
@@ -138,9 +138,9 @@ from tools.english_tool import (
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
-    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, READ_DATA_SOURCE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
+    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, READ_DATA_SOURCE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
-    get_hornbills_hub, append_notion_note, read_notion_data_source, create_notion_database_record, update_notion_database_record,
+    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, read_notion_data_source, create_notion_database_record, update_notion_database_record,
 )
 
 register("get_datetime", get_datetime, DATETIME_DEF)
@@ -174,6 +174,7 @@ register("read_notion_page", read_notion_page, NOTION_READ_DEF)
 register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)
 register("get_hornbills_hub", get_hornbills_hub, HORNBILLS_HUB_DEF)
 register("append_notion_note", append_notion_note, APPEND_NOTE_DEF)
+register("append_notion_rich_blocks", append_notion_rich_blocks, APPEND_RICH_BLOCKS_DEF)
 register("get_hornbills_destinations", get_hornbills_destinations, DESTINATIONS_DEF)
 register("get_cutsports_destinations", get_cutsports_destinations, CUTSPORTS_DESTINATIONS_DEF)
 register("get_drawsports_destinations", get_drawsports_destinations, DRAWSPORTS_DESTINATIONS_DEF)

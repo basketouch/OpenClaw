@@ -53,9 +53,24 @@ closes the session (for example, “terminamos”, “cierra”, “guárdalo”
 resumen”), Alex reads the destination, de-duplicates it and appends a dated,
 non-destructive structured note.
 
-`append_notion_note` never replaces or deletes Notion content. Creating a new
-Notion page and turning a note into a task still require confirmation, so an
-ambiguous conversation cannot silently create structure or work.
+## Rich Notion writing
+
+OpenClaw reads a data source schema before it creates or updates a record, so
+it only fills properties that actually exist. New database records and child
+pages can include real Notion blocks: headings, paragraphs, bulleted or
+numbered lists, to-dos, quotes, callouts, dividers, tables and linked text.
+
+The standard templates are `hornbills_review`, `product_update`,
+`marketing_proposal`, `action` and `structured_note`. They turn named sections
+into a consistent visual structure rather than storing Markdown-looking text in
+a single paragraph. For example, Hornbills reviews separate findings,
+hypotheses, questions and next step.
+
+`append_notion_rich_blocks` is additive only: it appends formatted blocks to an
+existing page or record and never replaces or deletes content. Updating a
+record's properties remains separate from its page content. Creating a new
+page and turning a note into a task still require confirmation, so an ambiguous
+conversation cannot silently create structure or work.
 
 ## Product project contexts
 
