@@ -5,6 +5,18 @@ let busy = false;
 let currentChatId = null;
 let pendingFile = null; // { file_id, filename, mime_type, size }
 let pushSub = null;
+let nextAssistContext = null;
+let mediaRecorder = null;
+let recordingStream = null;
+let audioChunks = [];
+let speakAfterReply = false;
+let activeSpeech = null;
+let voicePressTimer = null;
+let voiceHoldActive = false;
+let voiceReleasePending = false;
+let voiceCancelPending = false;
+let voiceStartPoint = null;
+let voiceStartRequest = 0;
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +73,7 @@ async function showApp() {
   document.getElementById('auth-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
   await loadChatList();
+  initVoiceControls();
   document.getElementById('msg-input').focus();
   initPush();
 }
@@ -86,12 +99,21 @@ function closeSidebar() {
 // ─── Chat list ───────────────────────────────────────────────────────────────
 
 let chatList = [];
+let workspaceList = [];
+let projectList = [];
+let currentScope = { workspace_id: 'general', project_id: null, scope_source: 'auto' };
+let openChatMenuId = null;
+let movingChatId = null;
+let renamingChatId = null;
+let collapsedSpaces = new Set(JSON.parse(localStorage.getItem('oc_collapsed_spaces') || '[]'));
 
 async function loadChatList() {
   try {
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     const data = await r.json();
     chatList = data.chats || [];
+    workspaceList = data.workspaces || [];
+    projectList = data.projects || [];
     renderChatList();
     if (chatList.length > 0) {
       await loadChat(chatList[0].id);
@@ -105,22 +127,126 @@ async function loadChatList() {
 
 function renderChatList() {
   const el = document.getElementById('chat-list');
-  if (!chatList.length) {
-    el.innerHTML = '<p class="no-chats">Sin conversaciones</p>';
-    return;
-  }
-  el.innerHTML = chatList.map(c => {
+  const chat = c => {
     const active = c.id === currentChatId ? 'active' : '';
     const date = c.updated ? fmtDate(c.updated) : '';
+    const editing = c.id === renamingChatId;
+    const menuOpen = c.id === openChatMenuId;
     return `<div class="chat-item ${active}" onclick="loadChat('${c.id}')">
       <div class="chat-item-top">
-        <span class="chat-item-title">${esc(c.title)}</span>
+        ${editing
+          ? `<input class="chat-item-title-input" id="chat-title-input-${c.id}" value="${esc(c.title)}" maxlength="120" onclick="event.stopPropagation()" onkeydown="onRenameKey(event, '${c.id}')" onblur="saveInlineRename('${c.id}')">`
+          : `<span class="chat-item-title">${esc(c.title)}</span>`}
         <span class="chat-item-date">${date}</span>
       </div>
       ${c.preview ? `<div class="chat-item-preview">${esc(c.preview)}</div>` : ''}
-      <button class="chat-item-del" onclick="deleteChat(event,'${c.id}')" title="Eliminar">✕</button>
+      <button class="chat-item-more" onclick="toggleChatMenu(event, '${c.id}')" aria-label="Opciones de conversación" aria-expanded="${menuOpen}">⋯</button>
+      ${menuOpen ? `<div class="chat-action-menu" onclick="event.stopPropagation()">${movingChatId === c.id
+        ? `<div class="chat-action-menu-title">Mover a…</div>
+           <button onclick="moveChat('${c.id}', 'general', null)">💬 General</button>
+           <button onclick="moveChat('${c.id}', 'hornbills', null)">🏀 Hornbills</button>
+           <div class="chat-action-menu-title">Proyectos</div>
+           ${projectList.map(p => `<button onclick="moveChat('${c.id}', 'projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('')}
+           <button class="chat-menu-back" onclick="showChatActions('${c.id}')">‹ Volver</button>`
+        : `<button onclick="showMoveChoices('${c.id}')">Mover a…</button>
+           <button onclick="beginRenameChat('${c.id}')">Renombrar</button>
+           <button class="danger" onclick="deleteChat(event,'${c.id}')">Eliminar</button>`}
+      </div>` : ''}
     </div>`;
+  };
+  const inScope = (workspaceId, projectId = null) => chatList.filter(c =>
+    c.workspace_id === workspaceId && (projectId ? c.project_id === projectId : !c.project_id)
+  );
+  const section = (label, items, workspaceId, projectId = null, depth = '', key = workspaceId + (projectId ? `:${projectId}` : '')) => {
+    const collapsed = collapsedSpaces.has(key);
+    return `<section class="space-section ${depth} ${collapsed ? 'collapsed' : ''}">
+      <div class="space-label">
+        <button class="space-collapse" onclick="toggleSpace(event, '${key}')" aria-expanded="${!collapsed}" title="Plegar o desplegar">${collapsed ? '›' : '⌄'}</button>
+        <button class="space-name" onclick="toggleSpace(event, '${key}')">${label}</button>
+        <button class="space-new" onclick="startNewChat('${workspaceId}', ${projectId ? `'${projectId}'` : 'null'})" title="Nueva conversación aquí">＋</button>
+      </div>
+      <div class="space-chats">${items.length ? items.map(chat).join('') : '<div class="space-empty">Sin conversaciones</div>'}</div>
+    </section>`;
+  };
+  const spaces = workspaceList.map(w => {
+    if (w.id !== 'projects') return section(`${w.icon} ${esc(w.name)}`, inScope(w.id), w.id);
+    const projectSections = projectList.map(p => section(esc(p.name), inScope('projects', p.id), 'projects', p.id, 'project')).join('');
+    const direct = inScope('projects');
+    const collapsed = collapsedSpaces.has('projects');
+    return `<section class="space-section projects ${collapsed ? 'collapsed' : ''}">
+      <div class="space-label">
+        <button class="space-collapse" onclick="toggleSpace(event, 'projects')" aria-expanded="${!collapsed}" title="Plegar o desplegar">${collapsed ? '›' : '⌄'}</button>
+        <button class="space-name" onclick="toggleSpace(event, 'projects')">${w.icon} ${esc(w.name)}</button>
+        <button class="space-new" onclick="startNewChat('projects', null)" title="Nueva conversación aquí">＋</button>
+      </div>
+      <div class="space-chats">${direct.length ? direct.map(chat).join('') : ''}${projectSections}</div>
+    </section>`;
   }).join('');
+  // A conversation belongs to exactly one workspace. Do not duplicate recent
+  // conversations at the top of the sidebar: that made scoped chats look like
+  // General chats and obscured where they were actually saved.
+  el.innerHTML = spaces;
+  if (renamingChatId) {
+    const input = document.getElementById(`chat-title-input-${renamingChatId}`);
+    if (input) { input.focus(); input.select(); }
+  }
+}
+
+function toggleSpace(e, key) {
+  e.stopPropagation();
+  if (collapsedSpaces.has(key)) collapsedSpaces.delete(key); else collapsedSpaces.add(key);
+  localStorage.setItem('oc_collapsed_spaces', JSON.stringify([...collapsedSpaces]));
+  renderChatList();
+}
+
+function toggleChatMenu(e, id) {
+  e.stopPropagation();
+  openChatMenuId = openChatMenuId === id ? null : id;
+  movingChatId = null;
+  renderChatList();
+}
+
+function showMoveChoices(id) {
+  movingChatId = id;
+  renderChatList();
+}
+
+function showChatActions(id) {
+  movingChatId = null;
+  openChatMenuId = id;
+  renderChatList();
+}
+
+async function moveChat(id, workspaceId, projectId) {
+  try {
+    const r = await fetch(`/api/chats/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' }),
+    });
+    if (!r.ok) throw new Error('No se pudo mover');
+    chatList = chatList.map(c => c.id === id ? { ...c, workspace_id: workspaceId, project_id: projectId, scope_source: 'manual', updated: new Date().toISOString() } : c);
+    if (currentChatId === id) {
+      currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: 'manual' };
+      renderChatScope(currentScope);
+    }
+    openChatMenuId = null;
+    movingChatId = null;
+    renderChatList();
+  } catch (_) { alert('No se pudo mover la conversación.'); }
+}
+
+function openNewChatPicker() {
+  const el = document.getElementById('new-chat-picker');
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+  const spaces = workspaceList.filter(w => w.id !== 'projects').map(w =>
+    `<button onclick="startNewChat('${w.id}')"><span>${w.icon}</span>${esc(w.name)}</button>`
+  ).join('');
+  const projects = projectList.map(p =>
+    `<button onclick="startNewChat('projects','${p.id}')"><span>🚀</span>${esc(p.name)}</button>`
+  ).join('');
+  el.innerHTML = `<div class="new-chat-picker-title">Nueva conversación en…</div>${spaces}<div class="new-chat-picker-divider">Projects</div>${projects}`;
+  el.classList.remove('hidden');
 }
 
 function fmtDate(iso) {
@@ -133,19 +259,25 @@ function fmtDate(iso) {
   return d.toLocaleDateString('es', { day: 'numeric', month: 'short' });
 }
 
-async function startNewChat() {
+async function startNewChat(workspaceId = 'general', projectId = null) {
+  // Project buttons pass the project name; resolve it to its stable id.
+  const project = projectList.find(p => p.id === projectId || p.name === projectId);
+  if (project) { workspaceId = 'projects'; projectId = project.id; }
+  document.getElementById('new-chat-picker').classList.add('hidden');
   try {
     const r = await fetch('/api/chats', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspace_id: workspaceId, project_id: projectId }),
     });
     const chat = await r.json();
-    chatList.unshift({ id: chat.id, title: chat.title, updated: chat.updated, preview: '' });
+    chatList.unshift(chat);
     currentChatId = chat.id;
+    currentScope = { workspace_id: chat.workspace_id, project_id: chat.project_id, scope_source: chat.scope_source };
     history = [];
     renderChatList();
+    renderChatScope(currentScope);
     showWelcome();
-    document.getElementById('chat-title-hdr').textContent = 'OpenClaw';
     closeSidebar();
     document.getElementById('msg-input').focus();
   } catch (_) {
@@ -161,9 +293,10 @@ async function loadChat(id) {
     const chat = await r.json();
     currentChatId = id;
     history = chat.messages || [];
+    currentScope = { workspace_id: chat.workspace_id || 'general', project_id: chat.project_id || null, scope_source: chat.scope_source || 'auto' };
     renderMessages();
-    document.getElementById('chat-title-hdr').textContent = chat.title || 'OpenClaw';
     renderChatList();
+    renderChatScope(currentScope);
     closeSidebar();
     scrollBottom();
     document.getElementById('msg-input').focus();
@@ -172,6 +305,8 @@ async function loadChat(id) {
 
 async function deleteChat(e, id) {
   e.stopPropagation();
+  const chat = chatList.find(c => c.id === id);
+  if (!window.confirm(`¿Eliminar “${chat ? chat.title : 'esta conversación'}”? Esta acción no se puede deshacer.`)) return;
   await fetch(`/api/chats/${id}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
@@ -185,18 +320,61 @@ async function deleteChat(e, id) {
   }
 }
 
+function beginRenameChat(id) {
+  openChatMenuId = null;
+  renamingChatId = id;
+  renderChatList();
+}
+
+function onRenameKey(e, id) {
+  if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  if (e.key === 'Escape') { renamingChatId = null; renderChatList(); }
+}
+
+async function saveInlineRename(id) {
+  if (renamingChatId !== id) return;
+  const input = document.getElementById(`chat-title-input-${id}`);
+  const title = input ? input.value.trim() : '';
+  renamingChatId = null;
+  if (!title) { renderChatList(); return; }
+  const chat = chatList.find(c => c.id === id);
+  try {
+    const r = await fetch(`/api/chats/${id}/title`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (!r.ok) throw new Error('No se pudo cambiar el nombre');
+    chatList = chatList.map(c => c.id === id ? { ...c, title, updated: new Date().toISOString() } : c);
+    renderChatList();
+  } catch (_) {
+    alert('No se pudo cambiar el nombre de la conversación.');
+  }
+}
+
 async function saveCurrentChat() {
   if (!currentChatId) return;
   try {
     await fetch(`/api/chats/${currentChatId}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history }),
+      body: JSON.stringify({ messages: history, ...currentScope }),
     });
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     chatList = (await r.json()).chats || [];
     renderChatList();
   } catch (_) { /* ignore */ }
+}
+
+function scopeName(scope) {
+  const workspace = workspaceList.find(w => w.id === scope.workspace_id);
+  const project = projectList.find(p => p.id === scope.project_id);
+  return project ? `Projects · ${project.name}` : (workspace ? workspace.name : 'General');
+}
+
+function renderChatScope(scope = currentScope) {
+  const el = document.getElementById('chat-title-hdr');
+  if (el) el.textContent = scopeName(scope);
 }
 
 function renderMessages() {
@@ -233,9 +411,10 @@ function showWelcome() {
 
 function newChat() { startNewChat(); }
 
-function prefill(text) {
+function prefill(text, assistContext = null) {
   const input = document.getElementById('msg-input');
   input.value = text;
+  nextAssistContext = assistContext;
   resize(input);
   sendMessage();
 }
@@ -249,25 +428,212 @@ function resize(el) {
 
 function onKey(e) {
   if (e.key !== 'Enter' || e.shiftKey) return;
-  var ta = e.target;
-  var pos = ta.selectionStart;
-  var text = ta.value;
-  var lineStart = text.lastIndexOf('\n', pos - 1) + 1;
-  var line = text.substring(lineStart, pos);
-  var m = line.match(/^(\d+)\.\s/);
-  if (!m) return;
-  if (line.trim() === m[0].trim()) {
-    e.preventDefault();
-    ta.value = text.substring(0, lineStart) + text.substring(pos);
-    ta.selectionStart = ta.selectionEnd = lineStart;
-    resize(ta);
+  e.preventDefault();
+  sendMessage();
+}
+
+// ─── Voice dictation ────────────────────────────────────────────────────────
+
+function setVoiceStatus(message = '', error = false) {
+  const status = document.getElementById('voice-status');
+  status.textContent = message;
+  status.classList.toggle('hidden', !message);
+  status.classList.toggle('error', error);
+}
+
+function setVoiceButton(recording = false, working = false) {
+  const button = document.getElementById('voice-btn');
+  button.classList.toggle('recording', recording);
+  button.classList.toggle('working', working);
+  button.disabled = working;
+  button.title = recording ? 'Grabando…' : (working ? 'Transcribiendo…' : 'Toca para dictar · Mantén para hablar con Alex');
+  button.setAttribute('aria-label', button.title);
+}
+
+function initVoiceControls() {
+  const button = document.getElementById('voice-btn');
+  if (!button || button.dataset.voiceBound) return;
+  button.dataset.voiceBound = 'true';
+  button.addEventListener('pointerdown', onVoicePointerDown);
+  button.addEventListener('pointermove', onVoicePointerMove);
+  button.addEventListener('pointerup', onVoicePointerUp);
+  button.addEventListener('pointercancel', onVoicePointerCancel);
+}
+
+function isRecordingVoice() {
+  return mediaRecorder && mediaRecorder.state === 'recording';
+}
+
+function onVoicePointerDown(event) {
+  if (event.button !== undefined && event.button !== 0) return;
+  const button = event.currentTarget;
+  if (button.disabled) return;
+  event.preventDefault();
+  button.setPointerCapture?.(event.pointerId);
+  voiceStartPoint = { x: event.clientX, y: event.clientY };
+  voiceCancelPending = false;
+  voiceReleasePending = false;
+
+  if (isRecordingVoice()) {
+    voiceHoldActive = true;
     return;
   }
-  e.preventDefault();
-  var next = '\n' + (parseInt(m[1]) + 1) + '. ';
-  ta.value = text.substring(0, pos) + next + text.substring(pos);
-  ta.selectionStart = ta.selectionEnd = pos + next.length;
-  resize(ta);
+
+  voiceHoldActive = false;
+  voicePressTimer = window.setTimeout(() => {
+    voicePressTimer = null;
+    voiceHoldActive = true;
+    startVoiceRecording(true);
+  }, 350);
+}
+
+function onVoicePointerMove(event) {
+  if (!voiceHoldActive || !voiceStartPoint) return;
+  const distance = Math.hypot(event.clientX - voiceStartPoint.x, event.clientY - voiceStartPoint.y);
+  if (distance > 64 && !voiceCancelPending) {
+    voiceCancelPending = true;
+    setVoiceStatus('Suelta para cancelar el mensaje de voz.');
+  }
+}
+
+function resetVoicePress() {
+  if (voicePressTimer) window.clearTimeout(voicePressTimer);
+  voicePressTimer = null;
+  voiceHoldActive = false;
+  voiceStartPoint = null;
+}
+
+function onVoicePointerUp(event) {
+  event.preventDefault();
+  const wasHold = voiceHoldActive;
+  resetVoicePress();
+  if (!wasHold) {
+    toggleVoiceRecording();
+    return;
+  }
+  voiceReleasePending = true;
+  if (voiceCancelPending) {
+    cancelVoiceRecording();
+  } else if (isRecordingVoice()) {
+    mediaRecorder.stop();
+  }
+}
+
+function onVoicePointerCancel(event) {
+  event.preventDefault();
+  const wasHold = voiceHoldActive;
+  resetVoicePress();
+  if (wasHold) {
+    voiceCancelPending = true;
+    cancelVoiceRecording();
+  }
+}
+
+async function toggleVoiceRecording() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  await startVoiceRecording(false);
+}
+
+async function startVoiceRecording(sendAutomatically) {
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    setVoiceStatus('La grabación no está disponible en este navegador.', true);
+    return;
+  }
+  try {
+    const requestId = ++voiceStartRequest;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (requestId !== voiceStartRequest) {
+      stream.getTracks().forEach(track => track.stop());
+      return;
+    }
+    recordingStream = stream;
+    audioChunks = [];
+    const preferredType = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/webm']
+      .find(type => MediaRecorder.isTypeSupported(type));
+    const recorder = preferredType ? new MediaRecorder(recordingStream, { mimeType: preferredType }) : new MediaRecorder(recordingStream);
+    recorder.ondataavailable = event => { if (event.data.size) audioChunks.push(event.data); };
+    recorder.onstop = () => transcribeRecording(sendAutomatically);
+    mediaRecorder = recorder;
+    recorder.start();
+    setVoiceButton(true);
+    setVoiceStatus(sendAutomatically
+      ? '● Escuchando… Suelta para enviar · desliza para cancelar.'
+      : '● Escuchando… Toca otra vez al terminar.');
+    if (sendAutomatically && voiceReleasePending) {
+      if (voiceCancelPending) cancelVoiceRecording();
+      else recorder.stop();
+    }
+  } catch (error) {
+    const denied = error && error.name === 'NotAllowedError';
+    setVoiceStatus(denied ? 'Necesitas permitir el micrófono para dictar.' : 'No se ha podido iniciar el micrófono.', true);
+    stopRecordingTracks();
+  }
+}
+
+function cancelVoiceRecording() {
+  voiceStartRequest += 1;
+  voiceReleasePending = false;
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    const recorder = mediaRecorder;
+    recorder.onstop = () => {
+      if (mediaRecorder === recorder) mediaRecorder = null;
+      audioChunks = [];
+      stopRecordingTracks();
+      setVoiceButton();
+      setVoiceStatus('Mensaje de voz cancelado.');
+    };
+    recorder.stop();
+    return;
+  }
+  audioChunks = [];
+  stopRecordingTracks();
+  setVoiceButton();
+  setVoiceStatus('Mensaje de voz cancelado.');
+}
+
+function stopRecordingTracks() {
+  if (recordingStream) recordingStream.getTracks().forEach(track => track.stop());
+  recordingStream = null;
+}
+
+async function transcribeRecording(sendAutomatically = false) {
+  const type = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'audio/webm';
+  const extension = type.includes('mp4') ? 'm4a' : 'webm';
+  const audio = new Blob(audioChunks, { type });
+  mediaRecorder = null;
+  audioChunks = [];
+  stopRecordingTracks();
+  if (!audio.size) { setVoiceButton(); setVoiceStatus('No se ha grabado audio.', true); return; }
+
+  setVoiceButton(false, true);
+  setVoiceStatus('Transcribiendo…');
+  try {
+    const data = new FormData();
+    data.append('file', audio, `nota-de-voz.${extension}`);
+    const response = await fetch('/api/transcribe', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: data,
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.detail || 'No se pudo transcribir');
+    const input = document.getElementById('msg-input');
+    input.value = [input.value.trim(), result.text].filter(Boolean).join(input.value.trim() ? ' ' : '');
+    resize(input);
+    input.focus();
+    if (sendAutomatically) {
+      speakAfterReply = true;
+      setVoiceStatus('Enviando a Alex…');
+      await sendMessage();
+    } else {
+      setVoiceStatus('Texto listo para revisar y enviar.');
+    }
+  } catch (error) {
+    setVoiceStatus(error.message || 'No se pudo transcribir el audio.', true);
+  } finally {
+    setVoiceButton();
+  }
 }
 
 // ─── File upload ─────────────────────────────────────────────────────────────
@@ -323,6 +689,7 @@ async function sendMessage() {
   if (welcome) welcome.remove();
 
   history.push({ role: 'user', content: msgText });
+  document.querySelectorAll('.context-shortcuts').forEach(el => el.remove());
   appendUserMsg(msgText, true, pendingFile);
 
   const filePayload = pendingFile ? Object.assign({}, pendingFile) : null;
@@ -337,7 +704,9 @@ async function sendMessage() {
 
   try {
     const contextMessages = history.slice(-16);
-    const body = { messages: contextMessages };
+    const body = { messages: contextMessages, ...currentScope };
+    if (nextAssistContext) body.assist_context = nextAssistContext;
+    nextAssistContext = null;
     if (filePayload) {
       body.file_id = filePayload.file_id;
       body.filename = filePayload.filename;
@@ -384,6 +753,9 @@ async function sendMessage() {
           doneTool(bubble.parentElement.querySelector('.tools'), ev.name);
         } else if (ev.type === 'done') {
           bubble.classList.remove('cursor');
+          if (ev.workspace_id) {
+            currentScope = { workspace_id: ev.workspace_id, project_id: ev.project_id || null, scope_source: currentScope.scope_source };
+          }
         } else if (ev.type === 'error') {
           bubble.classList.remove('cursor');
           bubble.innerHTML = '<span class="err">Error: ' + esc(ev.message) + '</span>';
@@ -395,9 +767,17 @@ async function sendMessage() {
     if (responseText) {
       history.push({ role: 'assistant', content: responseText });
       await saveCurrentChat();
+      renderContextShortcuts(msgText, responseText);
+      const shouldSpeak = speakAfterReply;
+      speakAfterReply = false;
+      if (shouldSpeak) {
+        const listenButton = bubble.parentElement.querySelector('.listen-btn');
+        if (listenButton) speakBubble(listenButton);
+      }
     }
 
   } catch (err) {
+    speakAfterReply = false;
     bubble.classList.remove('cursor');
     bubble.innerHTML = '<span class="err">' + esc(err.message) + '</span>';
   } finally {
@@ -405,6 +785,298 @@ async function sendMessage() {
     setDisabled(false);
     setStatus('ready');
   }
+}
+
+function hornbillsIntent(userText, responseText) {
+  const recent = history.slice(-10).filter(m => m.role === 'user').map(m => m.content).join(' ') + ' ' + userText;
+  const text = recent.toLowerCase();
+  const score = patterns => patterns.reduce((total, pattern) => total + (text.match(pattern) || []).length, 0);
+  const intents = {
+    video: score([/vídeo|video|clip|análisis|analysis|spacing|motion|low post|high post|pnr|pick and roll/g]),
+    player: score([/jugador|player|rol|role|desarrollo|development|strength|fortaleza|minutes|minutos|lesi[oó]n/g]),
+    scouting: score([/rival|opponent|scouting|game plan|contra |\bvs\b|ato|blob|slob|weakness/g]),
+    practice: score([/entrenamiento|training|práctica|practice|sesión|session|preseason|pretemporada/g]),
+    staff: score([/césar|cesar|staff|head coach|reuni[oó]n|meeting|decisi[oó]n|proposal|propuesta/g]),
+  };
+  return Object.entries(intents).sort((a, b) => b[1] - a[1])[0][1] ? Object.entries(intents).sort((a, b) => b[1] - a[1])[0][0] : 'video';
+}
+
+function hornbillsActions(intent) {
+  const actions = {
+    video: [
+      ['📊 Guardar análisis', 'Cierra esta revisión y guárdala como un análisis en Analysis Library. Separa hipótesis, preguntas y próximos pasos.'],
+      ['🎯 Vincular a rival', 'Convierte estas observaciones en scouting del rival o del partido correspondiente.'],
+      ['🇬🇧 Preparar para César', 'Ayúdame a formular para César, en inglés natural y oral, las preguntas que salen de esta revisión.', 'english'],
+      ['🏋️ Llevar a práctica', 'Propón una práctica concreta a partir de estos hallazgos, sin crearla hasta que tenga fecha y objetivo claros.'],
+    ],
+    player: [
+      ['🔒 Nota de jugador', 'Guarda esta evaluación como nota privada de jugador, con estado Needs Review.'],
+      ['👤 Actualizar desarrollo', 'Si esta información está confirmada, actualiza el foco de desarrollo o perfil del jugador correspondiente.'],
+      ['📊 Vincular análisis', 'Guarda esto como análisis de jugador y vincúlalo al jugador correspondiente.'],
+      ['🇬🇧 Preparar feedback', 'Ayúdame a formular en inglés un feedback breve y constructivo para este jugador.', 'english'],
+    ],
+    scouting: [
+      ['🎯 Guardar scouting', 'Crea o actualiza el registro de Games & Scouting correspondiente con estos patrones y prioridades.'],
+      ['🛡️ Prioridades defensivas', 'Convierte esto en prioridades defensivas concretas para el game plan.'],
+      ['🏀 Atacar debilidades', 'Extrae las debilidades a atacar y añádelas al scouting del rival.'],
+      ['🇬🇧 Brief para staff', 'Ayúdame a explicar este scouting en inglés claro para el staff.', 'english'],
+    ],
+    practice: [
+      ['🏋️ Crear sesión', 'Crea un borrador de Practice Session con objetivo principal, secundarios y estado Draft.'],
+      ['🎯 Definir objetivos', 'Convierte esta conversación en objetivos principales y secundarios de práctica.'],
+      ['👤 Vincular jugadores', 'Identifica los jugadores que deben vincularse a esta sesión y prepara la relación.'],
+      ['🇬🇧 Explicar práctica', 'Ayúdame a explicar esta práctica en inglés claro para el staff o los jugadores.', 'english'],
+    ],
+    staff: [
+      ['🇬🇧 Pregunta para César', 'Ayúdame a formular esta pregunta para César en inglés natural y directo.', 'english'],
+      ['🤝 Propuesta de staff', 'Convierte esto en una propuesta para Staff Notes & Decisions con estado To Discuss.'],
+      ['✅ Registrar decisión', 'Si esta conversación contiene una decisión confirmada, regístrala como Decision para el staff.'],
+      ['🔒 Guardar privado', 'Guarda esta reflexión como nota privada, sin compartirla con el staff.'],
+    ],
+  };
+  return actions[intent] || actions.video;
+}
+
+function renderContextShortcuts(userText, responseText) {
+  if (currentScope.workspace_id === 'english') {
+    renderEnglishShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'cutsports') {
+    renderCutSportsShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'drawsports') {
+    renderDrawSportsShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'the-analyst') {
+    renderTheAnalystShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'comunidad') {
+    renderComunidadShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id === 'projects' && currentScope.project_id === 'basketouch-hub') {
+    renderBasketouchHubShortcuts(userText, responseText);
+    return;
+  }
+  if (currentScope.workspace_id !== 'hornbills') return;
+  if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
+  const intent = hornbillsIntent(userText, responseText);
+  const labels = { video: 'Vídeo y análisis', player: 'Jugador', scouting: 'Rival y scouting', practice: 'Entrenamiento', staff: 'Staff y César' };
+  const actions = hornbillsActions(intent);
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts';
+  el.innerHTML = `<span class="context-shortcuts-label">${labels[intent]} · ¿Qué hacemos con esto?</span>` + actions.map(([label, prompt, assist]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}" data-assist="${assist || ''}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt, e.target.dataset.assist || null);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderCutSportsShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const crm = /lead|cliente|club|entrenador|coach|contacto|email|demo|piloto|licencia/.test(text);
+  const marketing = /marketing|campaña|campana|beta|copy|landing|contenido|reel|newsletter/.test(text);
+  const release = /release|publicar|publicación|publicacion|build|appcast|web|dmg/.test(text);
+  const actions = crm ? [
+    ['👤 Registrar en CRM', 'Confirma que este contacto es un lead real y crea o actualiza el registro correspondiente en CRM — CutSports.'],
+    ['📆 Definir próximo paso', 'Define el próximo paso y fecha de seguimiento para este lead, sin inventar información de contacto.'],
+    ['✉️ Preparar mensaje', 'Redacta un mensaje breve y personalizado para este contacto.'],
+    ['🔍 Revisar historial', 'Busca si ya existe este contacto o una oportunidad relacionada antes de crear nada.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de CutSports: objetivo, audiencia, mensaje y siguiente decisión.'],
+    ['🧪 Llevar a BETA', 'Define cómo validar esta idea con los usuarios BETA antes de ejecutarla.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy para esta idea con tono CutSports.'],
+    ['📌 Guardar decisión', 'Si esta propuesta ya está aprobada, resume la decisión y el siguiente paso de ejecución.'],
+  ] : release ? [
+    ['📦 Preparar publicación', 'Convierte esto en una propuesta de nota para Pendiente de publicar, sin registrar una publicación como hecha.'],
+    ['✅ Checklist de release', 'Prepara un checklist de verificación antes de publicar web o build Mac.'],
+    ['🧭 Contrastar estado', 'Contrasta esta afirmación con Estado del Proyecto antes de darla por válida.'],
+    ['📝 Crear backlog', 'Si hay trabajo pendiente para este release, crea o actualiza el ítem correspondiente en Backlog — CutSports.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — CutSports con área, prioridad y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y señala qué está verificado y qué es propuesta.'],
+    ['📣 Convertir en propuesta', 'Estructura esto como una propuesta breve de producto o marketing, sin registrarla como hecho todavía.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts cutsports-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">CutSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderDrawSportsShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const marketing = /marketing|campaña|campana|copy|landing|contenido|reel|newsletter|instagram|tiktok|youtube|linkedin|kpi/.test(text);
+  const release = /release|publicar|publicación|publicacion|app store|appstore|build|archive|submit for review|versión|version|tienda/.test(text);
+  const actions = release ? [
+    ['📦 Añadir al lote', 'Comprueba si este cambio ya está en Pendiente de publicar y, si no, prepara una propuesta de ítem para el siguiente lote de DrawSports.'],
+    ['✅ Checklist de publicación', 'Prepara el checklist mínimo para publicar este lote, sin afirmar que ya se ha publicado.'],
+    ['🧭 Contrastar estado', 'Contrasta este cambio con Estado del Proyecto y distingue entre listo en repo, pendiente y publicado.'],
+    ['📝 Preparar notas', 'Redacta un borrador de notas de versión claro para usuarios, en español e inglés si aplica.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de DrawSports: objetivo, audiencia, mensaje, canal y siguiente decisión.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy para DrawSports, centrada en el problema real del entrenador.'],
+    ['📊 Definir medición', 'Propón los KPIs y la forma de medir esta acción sin inventar resultados.'],
+    ['📌 Guardar decisión', 'Si esta propuesta ya está aprobada, resume la decisión, el responsable y el siguiente paso.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — DrawSports con área, prioridad, estado y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y señala qué está verificado, qué falta y qué es propuesta.'],
+    ['📦 Llevar a publicación', 'Si este cambio ya está listo en repo pero aún no está publicado, prepara una propuesta para Pendiente de publicar.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts drawsports-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">DrawSports · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderTheAnalystShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const people = /lead|cliente|entrenador|coach|contacto|email|demo|embajador|embajadora|testimonio|caso de éxito|caso de exito/.test(text);
+  const marketing = /marketing|campaña|campana|copy|landing|contenido|reel|newsletter|instagram|youtube|linkedin|lanzamiento|rrss/.test(text);
+  const actions = people ? [
+    ['👤 Revisar contacto', 'Busca si este entrenador o contacto ya existe antes de crear un registro.'],
+    ['🤝 Registrar prospecto', 'Confirma que esta persona es un cliente potencial real y crea o actualiza el registro correspondiente.'],
+    ['🌟 Valorar embajador', 'Evalúa si este contacto encaja como embajador: segmento, audiencia, valor mutuo y próximo paso.'],
+    ['🗣️ Preparar mensaje', 'Redacta un mensaje breve, personalizado y útil para este contacto; no inventes datos.'],
+  ] : marketing ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea como propuesta de marketing de The Analyst: objetivo, audiencia, mensaje, canal y siguiente decisión.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy centrada en el problema que resuelve The Analyst para un entrenador.'],
+    ['🗓️ Planificar pieza', 'Si esta pieza ya está aprobada, prepara los datos necesarios para Calendario RRSS: canal, idioma, segmento, fecha y notas.'],
+    ['📊 Definir medición', 'Propón los KPIs de esta acción y cómo medirlos, sin inventar resultados.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza esta incoherencia o tarea en el Backlog de The Analyst.'],
+    ['🗺️ Llevar al roadmap', 'Convierte esta idea en una propuesta priorizable para Roadmap — Próximos Pasos, sin tratarla como decisión cerrada.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y separa lo verificado, lo pendiente y lo propuesto.'],
+    ['✅ Registrar decisión', 'Si esta decisión ya está confirmada, resume el alcance, el motivo y el siguiente paso para actualizar el estado del proyecto.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts analyst-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">The Analyst · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderComunidadShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const publishing = /publicar|publicación|publicacion|reel|youtube|instagram|newsletter|pieza lista|ya está preparado|ya esta preparado/.test(text);
+  const strategy = /marketing|funnel|campaña|campana|copy|contenido|laboratorio|vip|skool|precio|oferta|entregable|público|publico/.test(text);
+  const actions = publishing ? [
+    ['📦 Revisar si está lista', 'Comprueba si esta pieza ya tiene contenido, canal, formato y siguiente acción de publicación definidos.'],
+    ['📝 Preparar publicación', 'Si ya está preparada, conviértela en una propuesta para Pendiente de publicar sin marcarla como publicada.'],
+    ['✍️ Ajustar copy', 'Revisa el copy para que deje claro el valor para el entrenador y la siguiente acción.'],
+    ['📊 Definir medición', 'Define qué métrica y enlace o UTM permitirían evaluar esta publicación.'],
+  ] : strategy ? [
+    ['📣 Convertir en propuesta', 'Estructura esta idea para Marketing Comunidad: objetivo, audiencia, nivel de la escalera de valor, canal y siguiente decisión.'],
+    ['🧭 Definir frontera', 'Aclara qué parte corresponde a contenido público, Comunidad, Laboratorio o VIP y por qué.'],
+    ['✍️ Preparar copy', 'Escribe una primera versión de copy clara para entrenadores, sin prometer entregables no confirmados.'],
+    ['🎯 Llevar al backlog', 'Si falta trabajo para ejecutar esta idea, crea o actualiza un ítem en Backlog — Comunidad con área y prioridad.'],
+  ] : [
+    ['🛠️ Añadir al backlog', 'Comprueba duplicados y crea o actualiza este ítem en Backlog — Comunidad con área, prioridad, estado y notas concisas.'],
+    ['🎯 Definir prioridad', 'Ayúdame a decidir el área y prioridad de este trabajo antes de guardarlo.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Proyecto y distingue lo verificado de lo propuesto.'],
+    ['📣 Convertir en propuesta', 'Estructura esto como una propuesta de producto, contenido o marketing sin registrarla como decisión cerrada.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts comunidad-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">Comunidad · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderBasketouchHubShortcuts(userText, responseText) {
+  const text = (history.slice(-8).map(m => m.content).join(' ') + ' ' + userText).toLowerCase();
+  const metrics = /métrica|metrica|kpi|dashboard|funnel|mrr|ingresos|usuarios|retención|retencion|datos|supabase|instrumentación|instrumentacion/.test(text);
+  const planning = /prioridad|semana|acción|accion|tarea|hacer|bloqueado|siguiente paso|roadmap|coordinar/.test(text);
+  const actions = metrics ? [
+    ['📊 Contrastar fuente', 'Indica qué fuente real debe confirmar cada métrica y qué dato no está disponible todavía.'],
+    ['🧩 Revisar módulo', 'Contrasta esta necesidad con Módulos por producto y separa lo implementado, pendiente y propuesto.'],
+    ['🧭 Diseñar instrumentación', 'Convierte esto en una propuesta de instrumentación: evento o fuente, propietario, frecuencia y decisión que permitirá tomar.'],
+    ['🎯 Crear acción transversal', 'Si requiere coordinación entre productos o infraestructura, crea o actualiza una Acción central tras comprobar duplicados.'],
+  ] : planning ? [
+    ['✅ Llevar a Acciones', 'Comprueba duplicados y crea o actualiza esta acción central en Inbox, con resultado esperado, próximo paso y bloqueo si existe.'],
+    ['📅 Priorizar semana', 'Revisa Revisión semanal y propone si esta acción debe entrar en Esta semana, respetando el límite de cinco.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Hub y separa lo verificado, lo pendiente y la decisión necesaria.'],
+    ['🗺️ Llevar al roadmap', 'Convierte esto en una propuesta de roadmap con alcance, dependencia y criterio de prioridad.'],
+  ] : [
+    ['✅ Crear acción transversal', 'Si esto necesita trabajo operativo entre productos, comprueba duplicados y crea o actualiza una Acción central en Inbox.'],
+    ['📅 Revisar semana', 'Resume las acciones activas y los compromisos de esta semana, sin crear una lista paralela.'],
+    ['🧭 Contrastar estado', 'Contrasta esta conversación con Estado del Hub antes de afirmar que una capacidad está disponible o terminada.'],
+    ['📊 Separar dato y propuesta', 'Distingue los datos verificados, los datos que faltan y la propuesta de siguiente paso.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts basketouch-hub-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">Basketouch Hub · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
+}
+
+function renderEnglishShortcuts(userText, responseText) {
+  if (/guardad[oa]|saved|frase guardada/i.test(responseText)) return;
+  const text = (userText + ' ' + responseText).toLowerCase();
+  const isPractice = /practic|role play|conversation|conversaci[oó]n|ensay/.test(text);
+  const actions = isPractice ? [
+    ['🎭 Seguir practicando', 'Sigamos el role play con una situación un poco más exigente.'],
+    ['📝 Corregir lo importante', 'Corrige solo mis errores de mayor impacto y dame la versión natural para decir en voz alta.'],
+    ['💾 Guardar frase útil', 'Guarda la frase más reutilizable de este ejercicio en mi English Coach.'],
+    ['🔁 Repasar', 'Ponme un repaso breve con frases que tenga pendientes.'],
+  ] : [
+    ['💾 Guardar frase útil', 'Guarda la frase más reutilizable que acabamos de trabajar en mi English Coach.'],
+    ['🗣️ Practicarla', 'Hazme practicar esta frase en un role play corto y realista.'],
+    ['📝 Explicar matiz', 'Explícame brevemente el matiz entre la traducción literal y la versión natural.'],
+    ['🔁 Repasar', 'Ponme un repaso breve con frases que tenga pendientes.'],
+  ];
+  const el = document.createElement('div');
+  el.className = 'context-shortcuts english-shortcuts';
+  el.innerHTML = '<span class="context-shortcuts-label">English Coach · siguiente paso</span>' + actions.map(([label, prompt]) =>
+    `<button class="context-shortcut" data-prompt="${esc(prompt)}">${label}</button>`
+  ).join('');
+  el.addEventListener('click', e => {
+    const prompt = e.target.dataset.prompt;
+    if (prompt) prefill(prompt);
+  });
+  document.getElementById('messages').appendChild(el);
+  scrollBottom();
 }
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────
@@ -435,11 +1107,75 @@ function appendAssistantBubble() {
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
           ' Copiar' +
         '</button>' +
+        '<button class="listen-btn" onclick="speakBubble(this)" title="Escuchar respuesta generada por IA">' +
+          '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a10 10 0 010 14"/></svg>' +
+          ' Escuchar <span>· Voz IA</span>' +
+        '</button>' +
       '</div>' +
     '</div>';
   msgs.appendChild(el);
   scrollBottom();
   return el.querySelector('.bubble');
+}
+
+function cleanSpeechText(text) {
+  return String(text)
+    .replace(/```[\s\S]*?```/g, ' He omitido un bloque de código. ')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/[*_#>`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function speakBubble(button) {
+  const bubble = button.closest('.msg-body').querySelector('.bubble');
+  const text = cleanSpeechText(bubble._rawText || bubble.innerText);
+  if (!text) return;
+  if (activeSpeech && !activeSpeech.paused) {
+    activeSpeech.pause();
+    activeSpeech.currentTime = 0;
+  }
+  button.disabled = true;
+  button.classList.add('speaking');
+  setListenLabel(button, 'Preparando…');
+  try {
+    let url = button.dataset.speechUrl;
+    if (!url) {
+      const response = await fetch('/api/speech', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || 'No se pudo generar la voz');
+      }
+      url = URL.createObjectURL(await response.blob());
+      button.dataset.speechUrl = url;
+    }
+    const audio = new Audio(url);
+    activeSpeech = audio;
+    audio.onended = () => resetListenButton(button);
+    audio.onerror = () => resetListenButton(button);
+    await audio.play();
+    setListenLabel(button, 'Detener');
+    button.onclick = () => { audio.pause(); audio.currentTime = 0; resetListenButton(button); };
+  } catch (error) {
+    button.title = error.message || 'No se pudo reproducir la voz';
+    resetListenButton(button);
+  }
+}
+
+function setListenLabel(button, label) {
+  button.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 010 7"/><path d="M19 5a10 10 0 010 14"/></svg> ' + esc(label) + (label === 'Escuchar' ? ' <span>· Voz IA</span>' : '');
+}
+
+function resetListenButton(button) {
+  if (!button) return;
+  button.disabled = false;
+  button.classList.remove('speaking');
+  button.onclick = () => speakBubble(button);
+  setListenLabel(button, 'Escuchar');
 }
 
 function copyBubble(btn) {
@@ -469,7 +1205,11 @@ function doneTool(container, name) {
   if (el) { el.className = 'tool done'; el.innerHTML = '<span class="tool-icon">✓</span> ' + esc(name); }
 }
 
-function setDisabled(v) { document.getElementById('send-btn').disabled = v; }
+function setDisabled(v) {
+  document.getElementById('send-btn').disabled = v;
+  const voiceButton = document.getElementById('voice-btn');
+  if (voiceButton && !(mediaRecorder && mediaRecorder.state === 'recording')) voiceButton.disabled = v;
+}
 
 function setStatus(state) {
   document.getElementById('status-dot').className = state === 'loading' ? 'dot loading' : 'dot';
@@ -510,7 +1250,9 @@ document.getElementById('password-input').addEventListener('keydown', function(e
 init();
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(function() {});
+  navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+    .then(function(registration) { return registration.update(); })
+    .catch(function() {});
 }
 
 function toggleSection(title) {

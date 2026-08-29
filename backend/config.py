@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 class GmailAccount(BaseModel):
     name: str
     email: str
-    password: str  # App Password de Google
+    password: str
 
 
 class Settings(BaseSettings):
@@ -17,12 +17,14 @@ class Settings(BaseSettings):
     auth_username: str = "jorge"
     auth_password: str = "change-me-please"
 
-    # OpenAI — motor único de Alex
+    # OpenAI
     openai_api_key: Optional[str] = None
     alex_model: str = "gpt-5.6-luna"
     alex_complex_model: str = "gpt-5.6-terra"
     english_model: str = "gpt-5.6-luna"
     transcription_model: str = "gpt-4o-mini-transcribe"
+    tts_model: str = "gpt-4o-mini-tts"
+    tts_voice: str = "marin"
     user_timezone: str = "Europe/Madrid"
 
     workspace_path: str = "/opt/openclaw/workspace"
@@ -33,9 +35,21 @@ class Settings(BaseSettings):
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
 
+    # NewsFlow Supabase
     supabase_url: Optional[str] = None
     supabase_key: Optional[str] = None
     supabase_service_key: Optional[str] = None
+
+    # English Coach Supabase — separate project (Jorge Lorenzo Coach)
+    english_supabase_url: Optional[str] = None
+    english_supabase_service_key: Optional[str] = None
+    english_supabase_user_id: Optional[str] = None
+
+    # Notion (server-side internal connection; never expose the token to the browser)
+    notion_api_key: Optional[str] = None
+    notion_english_data_source_id: Optional[str] = None
+    notion_actions_data_source_id: Optional[str] = None
+    notion_hornbills_hub_page_id: Optional[str] = None
 
     # Allow a VPS .env to retain keys from retired providers during migration.
     # OpenClaw does not read or use them.

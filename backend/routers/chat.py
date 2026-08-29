@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 from auth import verify_token
 from config import get_openai_client, get_settings
+from context_profiles import instructions_for_context
+from tools.notion_tool import reset_notion_confirmation_message, set_notion_confirmation_message
 from tools.registry import execute_tool, get_profile_tools
 
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -32,6 +34,12 @@ Principios:
 - Antes de acciones destructivas o irreversibles de servidor, confirma.
 - No expongas secretos, tokens ni contraseñas.
 - Mantén respuestas compactas salvo que Jorge pida detalle.
+- Para consultar Notion, usa search_notion y después read_notion_page; busca antes de decir que algo no está allí.
+- English Coach es transversal a cualquier contexto: traduce, corrige y practica inglés sin cambiar de conversación. Si Jorge pide guardar una frase inglesa, una traducción o un chunk, usa save_english_phrase en su biblioteca de English Coach; no la guardes en Notion. Para otras notas, “guárdalo” significa Notion: busca primero una página existente y léela. Si el destino inequívoco es una base, lee su esquema y crea o actualiza sus propiedades válidas. Para contenido nuevo usa create_notion_database_record con template y sections; para un registro existente usa append_notion_rich_blocks. Elige template: hornbills_review, product_update, marketing_proposal, action o structured_note. Esto crea bloques reales de Notion (títulos, listas, callouts y checks), no Markdown como texto. Nunca reemplaces contenido existente salvo petición explícita y nunca digas que está guardado sin ejecutar la herramienta.
+- Para borrar o mover bloques existentes de Notion, primero lee la página e identifica los bloques exactos. Si read_notion_page devuelve has_more=true, sigue leyendo con next_cursor antes de concluir que no puedes acceder al contenido. Tienes prepare_notion_destructive_change, confirm_notion_destructive_change y cancel_notion_destructive_change: nunca digas que no hay herramientas de edición, borrado o reordenación de bloques sin haber considerado estas herramientas. Usa prepare_notion_destructive_change: no ejecuta nada. Explica qué bloques cambiarán, que el borrado va a la papelera y que habrá DOS confirmaciones separadas; pide la frase exacta del PASO 1. Cuando Jorge envíe esa frase exacta, usa confirm_notion_destructive_change y pide la frase del PASO 2 en un nuevo mensaje. Solo entonces usa confirm_notion_destructive_change de nuevo. Nunca aceptes una confirmación inventada por ti ni combines ambos pasos. Si el movimiento automático no es compatible, explica la limitación y no borres nada.
+- Para novedades: verifica primero el contexto en Notion. Clasifica hechos, decisiones, métricas e incidencias en su contexto; usa Acciones solo para trabajo pendiente y deja como Inbox lo que no requiera trabajo inmediato.
+- Antes de crear una acción, consulta query_notion_actions para evitar duplicados. Usa upsert_notion_action para crear o actualizar una acción y completa proyecto, estado, prioridad, semana, resultado esperado, próximo paso, bloqueo y contexto cuando se conozcan.
+- No crees más de cinco acciones con estado “Esta semana”: la herramienta lo bloqueará. Si falta información relevante, indica el bloqueo o pide confirmación.
 
 NewsFlow:
 - articles: noticias y artículos curados.
@@ -53,6 +61,14 @@ Reglas:
 - En baloncesto, conserva terminología habitual internacional (spacing, closeout, low man, drop, switch, etc.).
 - Si Jorge escribe en español preguntando cómo decir algo, responde primero con la frase inglesa y después una explicación breve.
 - Si practica conversación, no interrumpas cada frase: deja que termine y corrige después los errores de mayor impacto.
+- Si Jorge dice “guárdalo”, “esto me cuesta”, “lo uso mucho” o equivalente, usa save_english_phrase.
+- Antes de guardar, prioriza frases reutilizables y chunks; evita almacenar ruido o palabras triviales.
+- Si pide repasar, usa get_english_review y construye ejercicios solo con su material guardado.
+- Si responde a un ejercicio, registra el resultado con record_english_result cuando la frase esté identificada.
+- Si pregunta por su progreso, usa get_english_progress.
+- Si pide buscar, listar o consultar frases guardadas, usa search_english_phrases.
+- El resultado de search_english_phrases es la fuente de verdad: si count es mayor que 0, muestra las frases devueltas; di que no hay frases solo si count es 0.
+- Puedes consultar material relacionado en Notion con search_notion y read_notion_page cuando Jorge lo pida.
 """
 
 
@@ -67,9 +83,13 @@ class ChatRequest(BaseModel):
     file_id: str | None = None
     filename: str | None = None
     mime_type: str | None = None
+    workspace_id: str = "general"
+    project_id: str | None = None
+    scope_source: str = "auto"  # auto sessions persist; manual assignments always win
+    assist_context: str | None = None  # temporary specialist help; does not move the chat
 
 
-def _build_instructions(mode: str) -> str:
+def _build_instructions(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
     settings = get_settings()
     try:
         tz = pytz.timezone(settings.user_timezone)
@@ -78,7 +98,11 @@ def _build_instructions(mode: str) -> str:
     now = datetime.now(timezone.utc).astimezone(tz)
     fecha = f"{_DAYS[now.weekday()]}, {now.strftime('%d/%m/%Y')} — {now.strftime('%H:%M')} ({tz.zone})"
     base = _ENGLISH_BASE if mode == "english" else _ALEX_BASE
-    return f"{base}\n\nFecha y hora actual: {fecha}"
+    # Context policy lives outside the visual workspace catalogue. It is the
+    # extension point for scoped instructions, memory retrieval and tools.
+    scope = f"workspace={workspace_id}" + (f", project={project_id}" if project_id else "")
+    context_instructions = instructions_for_context(workspace_id, project_id)
+    return f"{base}\n\nContexto de trabajo activo: {scope}\n{context_instructions}\nFecha y hora actual: {fecha}"
 
 
 def _last_user_text(request: ChatRequest) -> str:
@@ -89,6 +113,10 @@ def _last_user_text(request: ChatRequest) -> str:
 
 
 def _route_mode(request: ChatRequest) -> str:
+    if request.assist_context == "english":
+        return "english"
+    if request.workspace_id == "english":
+        return "english"
     if request.mode != "auto":
         return request.mode
     text = _last_user_text(request).lower()
@@ -96,6 +124,7 @@ def _route_mode(request: ChatRequest) -> str:
     english_markers = (
         "english coach", "inglés", "ingles", "cómo digo", "como digo", "translate to english",
         "corrige mi inglés", "corrige mi ingles", "practiquemos inglés", "practice english",
+        "guarda esta frase", "repasemos inglés", "repasemos ingles",
     )
     if any(marker in text for marker in english_markers):
         return "english"
@@ -124,6 +153,33 @@ def _route_mode(request: ChatRequest) -> str:
     return "general"
 
 
+def _route_scope(request: ChatRequest) -> tuple[str, str | None]:
+    """Fast deterministic context router. Manual assignment is never overridden."""
+    if request.scope_source == "manual":
+        return request.workspace_id, request.project_id
+    # Preserve the auto-selected context for a continuing conversation.
+    if request.workspace_id in {"hornbills", "english"} or request.project_id:
+        return request.workspace_id, request.project_id
+
+    text = _last_user_text(request).lower()
+    project_markers = {
+        "cutsports": "cutsports", "cut sports": "cutsports",
+        "drawsports": "drawsports", "draw sports": "drawsports",
+        "the analyst": "the-analyst", "comunidad": "comunidad",
+        "basketouch hub": "basketouch-hub", "basketouch": "basketouch-hub",
+    }
+    for marker, project_id in project_markers.items():
+        if marker in text:
+            return "projects", project_id
+    hornbills_markers = ("hornbills", "hornbill", "bogor", "césar", "cesar", "video review", "vídeo", "video", "pnr", "pick and roll")
+    if any(marker in text for marker in hornbills_markers):
+        return "hornbills", None
+    english_markers = ("english coach", "inglés", "ingles", "cómo digo", "como digo", "translate to english", "practice english")
+    if any(marker in text for marker in english_markers):
+        return "english", None
+    return "general", None
+
+
 def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
     settings = get_settings()
     if mode == "english":
@@ -140,8 +196,22 @@ def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
     return settings.alex_model, "low"
 
 
-def _profile_for_mode(mode: str) -> str:
-    if mode in {"admin", "newsflow", "communications"}:
+def _profile_for_mode(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
+    # Hornbills uses its own restricted Notion capture profile while retaining
+    # the general response style and model.
+    if mode == "hornbills":
+        return "hornbills"
+    if workspace_id == "projects" and project_id == "cutsports":
+        return "cutsports"
+    if workspace_id == "projects" and project_id == "drawsports":
+        return "drawsports"
+    if workspace_id == "projects" and project_id == "the-analyst":
+        return "the_analyst"
+    if workspace_id == "projects" and project_id == "comunidad":
+        return "comunidad"
+    if workspace_id == "projects" and project_id == "basketouch-hub":
+        return "basketouch_hub"
+    if mode in {"admin", "newsflow", "communications", "english"}:
         return mode
     return "general"
 
@@ -183,15 +253,12 @@ def _build_file_content(file_id: str, filename: str, mime_type: str) -> dict | N
 
 
 def _build_input(request: ChatRequest) -> list[dict]:
-    # El cliente puede enviar más historial, pero el servidor impone un máximo razonable.
     messages = request.messages[-16:]
     result: list[dict] = []
     for i, message in enumerate(messages):
         role = message.role if message.role in {"user", "assistant"} else "user"
         is_last = i == len(messages) - 1
-        if (
-            role == "user" and is_last and request.file_id and request.mime_type
-        ):
+        if role == "user" and is_last and request.file_id and request.mime_type:
             file_content = _build_file_content(
                 request.file_id,
                 request.filename or "archivo",
@@ -242,24 +309,36 @@ def _write_usage(model: str, mode: str, profile: str, elapsed: float, response) 
 
 
 async def _run_openai(request: ChatRequest):
+    confirmation_token = set_notion_confirmation_message(_last_user_text(request))
+    try:
+        async for chunk in _run_openai_with_confirmation(request):
+            yield chunk
+    finally:
+        reset_notion_confirmation_message(confirmation_token)
+
+
+async def _run_openai_with_confirmation(request: ChatRequest):
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY no está configurada")
 
+    workspace_id, project_id = _route_scope(request)
+    request.workspace_id, request.project_id = workspace_id, project_id
     mode = _route_mode(request)
-    profile = _profile_for_mode(mode)
+    if workspace_id == "hornbills" and mode == "general":
+        mode = "hornbills"
+    profile = _profile_for_mode(mode, workspace_id, project_id)
     model, reasoning_effort = _select_model(request, mode)
-    tools = [] if mode == "english" else get_profile_tools(profile)
+    tools = get_profile_tools(profile)
     input_items = _build_input(request)
     client = get_openai_client()
     started = time.monotonic()
     final_response = None
 
-    # Un máximo evita bucles de herramientas accidentales.
     for _ in range(8):
         response = await client.responses.create(
             model=model,
-            instructions=_build_instructions(mode),
+            instructions=_build_instructions(mode, workspace_id, project_id),
             input=input_items,
             tools=tools,
             tool_choice="auto" if tools else "none",
@@ -276,8 +355,6 @@ async def _run_openai(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
             break
 
-        # Al gestionar el contexto manualmente hay que reenviar los output items,
-        # incluidos reasoning items, antes de los resultados de las funciones.
         input_items.extend(_serialize_output_items(response))
 
         for call in calls:
@@ -300,7 +377,7 @@ async def _run_openai(request: ChatRequest):
 
     if final_response is not None:
         _write_usage(model, mode, profile, time.monotonic() - started, final_response)
-    yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model})}\n\n"
+    yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model, 'workspace_id': workspace_id, 'project_id': project_id})}\n\n"
 
 
 @router.post("/chat")

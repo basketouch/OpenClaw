@@ -1,5 +1,5 @@
-const CACHE = 'alex-v21';
-const SHELL = ['/', '/style.css?v=15', '/app.js?v=15', '/manifest.json'];
+const CACHE = 'alex-v29';
+const SHELL = ['/style.css?v=28', '/app.js?v=36', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(caches.open(CACHE).then(function(c) { return c.addAll(SHELL); }));
@@ -18,6 +18,18 @@ self.addEventListener('activate', function(e) {
 self.addEventListener('fetch', function(e) {
   if (e.request.url.indexOf('/api/') !== -1) {
     e.respondWith(fetch(e.request));
+    return;
+  }
+  // Always request the HTML shell again when the app is opened. The cached
+  // copy remains available only when the device is offline.
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(function(response) {
+        var copy = response.clone();
+        caches.open(CACHE).then(function(cache) { cache.put(e.request, copy); });
+        return response;
+      }).catch(function() { return caches.match(e.request); })
+    );
     return;
   }
   e.respondWith(
