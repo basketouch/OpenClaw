@@ -42,6 +42,11 @@ _ENGLISH_COACH_TOOLS = {
     "record_english_result", "get_english_progress",
 }
 
+_SCHEDULED_TASK_TOOLS = {
+    "list_scheduled_tasks", "create_scheduled_task", "update_scheduled_task",
+    "delete_scheduled_task", "toggle_scheduled_task",
+}
+
 _NOTION_BLOCK_CHANGE_TOOLS = {
     "prepare_notion_destructive_change", "confirm_notion_destructive_change",
     "cancel_notion_destructive_change",
@@ -51,52 +56,51 @@ _NOTION_BLOCK_CHANGE_TOOLS = {
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
         "get_datetime",
-        "web_search", "list_scheduled_tasks", "create_scheduled_task",
-        "delete_scheduled_task", "toggle_scheduled_task", "update_scheduled_task",
+        "web_search",
         "search_notion", "read_notion_page", "append_notion_note", "append_notion_rich_blocks",
         "query_notion_actions", "upsert_notion_action",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "communications": {
         "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
         "send_email", "reply_email", "send_telegram",
-    } | _ENGLISH_COACH_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _SCHEDULED_TASK_TOOLS,
     "newsflow": {
         "get_datetime", "query_newsflow", "insert_newsflow", "update_newsflow", "web_search",
-    } | _ENGLISH_COACH_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _SCHEDULED_TASK_TOOLS,
     "admin": {
         "get_datetime", "list_workspace_files", "read_workspace_file", "write_workspace_file",
         "run_shell", "host_shell",
-    } | _ENGLISH_COACH_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _SCHEDULED_TASK_TOOLS,
     "english": {
         "get_datetime", "save_english_phrase", "search_english_phrases", "get_english_review",
         "record_english_result", "get_english_progress",
         "search_notion", "read_notion_page", "create_notion_page",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "hornbills": {
         "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub", "get_hornbills_destinations",
         "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "query_notion_actions",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "cutsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_cutsports_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "drawsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_drawsports_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "the_analyst": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_the_analyst_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "comunidad": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_comunidad_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
     "basketouch_hub": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_basketouch_hub_destinations",
         "query_notion_actions", "upsert_notion_action",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _SCHEDULED_TASK_TOOLS,
 }
 
 
