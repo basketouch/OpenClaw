@@ -63,6 +63,29 @@ def _normalise_scope(chat: dict) -> bool:
     return changed
 
 
+def _normalise_title(chat: dict) -> bool:
+    """Give legacy untitled chats the same useful name as new conversations."""
+    title = chat.get("title")
+    if isinstance(title, str) and title.strip() and title != "Nueva conversación":
+        return False
+    for message in chat.get("messages", []):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content", "")
+        if not isinstance(content, str):
+            continue
+        content = " ".join(content.split())
+        if content:
+            chat["title"] = content[:50] + ("…" if len(content) > 50 else "")
+            return True
+    return False
+
+
+def _normalise_chat(chat: dict) -> bool:
+    changed = _normalise_scope(chat)
+    return _normalise_title(chat) or changed
+
+
 def _summary(chat: dict) -> dict:
     return {
         "id": chat["id"],
@@ -86,7 +109,7 @@ async def list_chats(_: str = Depends(verify_token)):
         try:
             with open(os.path.join(CHATS_DIR, fname)) as f:
                 c = json.load(f)
-            if _normalise_scope(c):
+            if _normalise_chat(c):
                 _save(c)
             chats.append(_summary(c))
         except Exception:
@@ -131,7 +154,7 @@ async def get_chat(cid: str, _: str = Depends(verify_token)):
     try:
         chat = _load(cid)
         chat.setdefault("mode", "auto")
-        if _normalise_scope(chat):
+        if _normalise_chat(chat):
             _save(chat)
         return chat
     except FileNotFoundError:
@@ -163,7 +186,7 @@ async def save_chat(cid: str, body: SaveBody, _: str = Depends(verify_token)):
     if body.messages is not None:
         chat["messages"] = body.messages[-40:]
     chat["updated"] = datetime.now(timezone.utc).isoformat()
-    _normalise_scope(chat)
+    _normalise_chat(chat)
 
     if body.workspace_id in WORKSPACE_IDS:
         chat["workspace_id"] = body.workspace_id
@@ -211,7 +234,7 @@ async def rename_chat(cid: str, body: RenameBody, _: str = Depends(verify_token)
 
     chat["title"] = title
     chat["updated"] = datetime.now(timezone.utc).isoformat()
-    _normalise_scope(chat)
+    _normalise_chat(chat)
     _save(chat)
     return {"success": True, "title": title}
 
