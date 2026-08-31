@@ -97,3 +97,40 @@ def toggle_scheduled_task(job_id: str, enabled: bool) -> dict:
     ok = sched.toggle_job(job_id, enabled)
     estado = "activada" if enabled else "pausada"
     return {"success": ok, "mensaje": f"Tarea {estado}." if ok else f"No se encontró la tarea {job_id}."}
+
+
+UPDATE_DEF = {
+    "name": "update_scheduled_task",
+    "description": (
+        "Modifica un recordatorio existente. Úsalo después de list_scheduled_tasks "
+        "para obtener el job_id y conserva los datos que el usuario no haya pedido cambiar."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "job_id": {"type": "string", "description": "ID del recordatorio a modificar"},
+            "name": {"type": "string", "description": "Nuevo título descriptivo"},
+            "prompt": {"type": "string", "description": "Nueva instrucción o mensaje para Alex"},
+            "schedule_type": {
+                "type": "string",
+                "enum": ["cron", "date", "interval"],
+                "description": "cron: hora fija. date: una sola vez. interval: cada N minutos/horas",
+            },
+            "schedule_params": {
+                "type": "object",
+                "description": "cron: {hour, minute, day_of_week opcional}; date: {run_date ISO}; interval: {hours} o {minutes}",
+            },
+        },
+        "required": ["job_id", "name", "prompt", "schedule_type", "schedule_params"],
+    },
+}
+
+
+def update_scheduled_task(job_id: str, name: str, prompt: str, schedule_type: str, schedule_params: dict) -> dict:
+    try:
+        job = sched.update_job(job_id, name, prompt, schedule_type, schedule_params)
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+    if job is None:
+        return {"success": False, "error": f"No se encontró la tarea {job_id}."}
+    return {"success": True, "tarea": job, "mensaje": f"Tarea '{job['name']}' actualizada correctamente."}

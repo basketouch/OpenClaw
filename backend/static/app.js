@@ -278,6 +278,7 @@ async function startNewChat(workspaceId = 'general', projectId = null) {
     history = [];
     renderChatList();
     renderChatScope(currentScope);
+    renderChatHeader(chat);
     showWelcome();
     closeSidebar();
     document.getElementById('msg-input').focus();
@@ -298,6 +299,7 @@ async function loadChat(id) {
     renderMessages();
     renderChatList();
     renderChatScope(currentScope);
+    renderChatHeader(chat);
     closeSidebar();
     scrollBottom();
     document.getElementById('msg-input').focus();
@@ -381,10 +383,15 @@ function renderChatScope(scope = currentScope) {
   renderChatHeader();
 }
 
-function renderChatHeader() {
+function renderChatHeader(chat = null) {
   const el = document.getElementById('app-title');
-  const chat = chatList.find(c => c.id === currentChatId);
-  if (el) el.textContent = `Alex - ${chat ? chat.title : 'Nueva conversación'}`;
+  const activeChat = chat || chatList.find(c => c.id === currentChatId);
+  const title = activeChat?.title || 'Nueva conversación';
+  if (el) {
+    el.textContent = `Alex - ${title}`;
+    el.title = title;
+  }
+  document.title = `Alex - ${title}`;
 }
 
 function renderMessages() {

@@ -52,7 +52,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
         "get_datetime",
         "web_search", "list_scheduled_tasks", "create_scheduled_task",
-        "delete_scheduled_task", "toggle_scheduled_task",
+        "delete_scheduled_task", "toggle_scheduled_task", "update_scheduled_task",
         "search_notion", "read_notion_page", "append_notion_note", "append_notion_rich_blocks",
         "query_notion_actions", "upsert_notion_action",
     } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS,
@@ -132,7 +132,8 @@ from tools.scheduler_tool import (
     LIST_DEF as SCHED_LIST_DEF,
     DELETE_DEF as SCHED_DELETE_DEF,
     TOGGLE_DEF as SCHED_TOGGLE_DEF,
-    create_scheduled_task, list_scheduled_tasks, delete_scheduled_task, toggle_scheduled_task,
+    UPDATE_DEF as SCHED_UPDATE_DEF,
+    create_scheduled_task, list_scheduled_tasks, delete_scheduled_task, toggle_scheduled_task, update_scheduled_task,
 )
 from tools.english_tool import (
     SAVE_DEF as EN_SAVE_DEF, SEARCH_DEF as EN_SEARCH_DEF, REVIEW_DEF as EN_REVIEW_DEF,
@@ -171,6 +172,7 @@ register("create_scheduled_task", create_scheduled_task, SCHED_CREATE_DEF)
 register("list_scheduled_tasks", list_scheduled_tasks, SCHED_LIST_DEF)
 register("delete_scheduled_task", delete_scheduled_task, SCHED_DELETE_DEF)
 register("toggle_scheduled_task", toggle_scheduled_task, SCHED_TOGGLE_DEF)
+register("update_scheduled_task", update_scheduled_task, SCHED_UPDATE_DEF)
 register("save_english_phrase", save_english_phrase, EN_SAVE_DEF)
 register("search_english_phrases", search_english_phrases, EN_SEARCH_DEF)
 register("get_english_review", get_english_review, EN_REVIEW_DEF)
