@@ -157,7 +157,7 @@ header {
 
 .hdr-left { display: flex; align-items: center; gap: 10px; }
 .hdr-icon { font-size: 20px; }
-.hdr-title { font-size: 15px; font-weight: 700; letter-spacing: -.2px; line-height: 1.2; }
+.hdr-title { max-width: min(52vw, 580px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 700; letter-spacing: -.2px; line-height: 1.2; }
 .hdr-sub { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 
 .hdr-right { display: flex; align-items: center; gap: 8px; }
@@ -518,6 +518,19 @@ textarea::-webkit-scrollbar-thumb { background: var(--border); }
 }
 .task-btn:hover { border-color: var(--accent); color: #a78bfa; }
 .task-btn.danger:hover { border-color: var(--err); color: #f87171; }
+.task-form { display: grid; gap: 8px; margin: 8px 0 12px; }
+.task-form input, .task-form textarea, .task-form select, .task-schedule-fields input, .task-schedule-fields select {
+  width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+  padding: 9px 10px; font: inherit; font-size: 13px; outline: none;
+}
+.task-form textarea { resize: vertical; min-height: 64px; }
+.task-form input:focus, .task-form textarea:focus, .task-form select:focus, .task-schedule-fields input:focus, .task-schedule-fields select:focus { border-color: var(--accent); }
+.task-schedule-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.task-schedule-fields .task-field-label { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.task-form-actions { display: flex; gap: 8px; align-items: center; }
+.task-save-btn { flex: 1; padding: 10px; font-size: 13px; }
+.task-form-status { min-height: 16px; color: var(--muted); font-size: 12px; }
+.task-form-status.error { color: var(--err); }
 .admin-btn {
   width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600;

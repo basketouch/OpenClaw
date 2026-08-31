@@ -6,6 +6,7 @@ CREATE_DEF = {
         "Crea una tarea programada que Alex ejecutará automáticamente. "
         "Puede enviar mensajes por Telegram, revisar emails, crear resúmenes, etc. "
         "Para cron usa schedule_type='cron' con params como {hour:9,minute:0}. "
+        "Para una sola vez usa schedule_type='date' con {run_date:'2030-01-01T09:00:00+07:00'}. "
         "Para repetir cada N horas/minutos usa schedule_type='interval' con {hours:2}."
     ),
     "input_schema": {
@@ -21,13 +22,14 @@ CREATE_DEF = {
             },
             "schedule_type": {
                 "type": "string",
-                "enum": ["cron", "interval"],
-                "description": "cron: hora fija. interval: cada N minutos/horas",
+                "enum": ["cron", "date", "interval"],
+                "description": "cron: hora fija. date: una sola vez. interval: cada N minutos/horas",
             },
             "schedule_params": {
                 "type": "object",
                 "description": (
                     "cron: {hour:9, minute:0} o {hour:9, minute:0, day_of_week:'mon-fri'}. "
+                    "date: {run_date:'2030-01-01T09:00:00+07:00'}. "
                     "interval: {minutes:30} o {hours:2}"
                 ),
             },

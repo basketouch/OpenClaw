@@ -1,7 +1,7 @@
 import asyncio
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from auth import verify_token
@@ -83,10 +83,36 @@ class ToggleBody(BaseModel):
     enabled: bool
 
 
+class TaskBody(BaseModel):
+    name: str
+    prompt: str
+    schedule_type: str
+    schedule_params: dict
+
+
 @router.patch("/tasks/{job_id}")
 async def toggle_task(job_id: str, body: ToggleBody, _: str = Depends(verify_token)):
     ok = sched.toggle_job(job_id, body.enabled)
     return {"success": ok}
+
+
+@router.post("/tasks")
+async def create_task(body: TaskBody, _: str = Depends(verify_token)):
+    try:
+        return {"task": sched.create_job(**body.model_dump())}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.put("/tasks/{job_id}")
+async def update_task(job_id: str, body: TaskBody, _: str = Depends(verify_token)):
+    try:
+        task = sched.update_job(job_id, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    if task is None:
+        raise HTTPException(404, "Recordatorio no encontrado")
+    return {"task": task}
 
 
 @router.delete("/tasks/{job_id}")

@@ -145,6 +145,7 @@ function renderChatList() {
         ? `<div class="chat-action-menu-title">Mover a…</div>
            <button onclick="moveChat('${c.id}', 'general', null)">💬 General</button>
            <button onclick="moveChat('${c.id}', 'hornbills', null)">🏀 Hornbills</button>
+           <button onclick="moveChat('${c.id}', 'english', null)">🇬🇧 English</button>
            <div class="chat-action-menu-title">Proyectos</div>
            ${projectList.map(p => `<button onclick="moveChat('${c.id}', 'projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('')}
            <button class="chat-menu-back" onclick="showChatActions('${c.id}')">‹ Volver</button>`
@@ -347,6 +348,7 @@ async function saveInlineRename(id) {
     if (!r.ok) throw new Error('No se pudo cambiar el nombre');
     chatList = chatList.map(c => c.id === id ? { ...c, title, updated: new Date().toISOString() } : c);
     renderChatList();
+    if (currentChatId === id) renderChatHeader();
   } catch (_) {
     alert('No se pudo cambiar el nombre de la conversación.');
   }
@@ -363,6 +365,7 @@ async function saveCurrentChat() {
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     chatList = (await r.json()).chats || [];
     renderChatList();
+    renderChatHeader();
   } catch (_) { /* ignore */ }
 }
 
@@ -375,6 +378,13 @@ function scopeName(scope) {
 function renderChatScope(scope = currentScope) {
   const el = document.getElementById('chat-title-hdr');
   if (el) el.textContent = scopeName(scope);
+  renderChatHeader();
+}
+
+function renderChatHeader() {
+  const el = document.getElementById('app-title');
+  const chat = chatList.find(c => c.id === currentChatId);
+  if (el) el.textContent = `Alex - ${chat ? chat.title : 'Nueva conversación'}`;
 }
 
 function renderMessages() {
@@ -1266,6 +1276,7 @@ function openAdmin() {
   document.getElementById('admin-panel').classList.remove('hidden');
   requestAnimationFrame(function() { document.getElementById('admin-panel').classList.add('open'); });
   loadAdminData();
+  resetTaskForm();
   updatePushUI();
 }
 
@@ -1283,7 +1294,7 @@ async function adminFetch(path) {
   return r.json();
 }
 
-async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); loadWA(); loadTelegramStatus(); }
+async function loadAdminData() { loadStats(); loadContainers(); loadTasks(); loadTelegramStatus(); }
 
 async function loadStats() {
   try {
@@ -1314,23 +1325,38 @@ async function loadTasks() {
   const el = document.getElementById('admin-tasks');
   try {
     const d = await adminFetch('/api/admin/tasks');
-    if (!d.tasks.length) { el.innerHTML = '<p class="no-items">No hay tareas programadas</p>'; return; }
+    adminTasks = d.tasks || [];
+    if (!d.tasks.length) { el.innerHTML = '<p class="no-items">No hay recordatorios programados</p>'; return; }
     el.innerHTML = d.tasks.map(function(t) {
-      const sched = t.schedule_type === 'cron'
-        ? 'Cron: ' + JSON.stringify(t.schedule_params)
-        : 'Cada: ' + JSON.stringify(t.schedule_params);
+      const sched = formatTaskSchedule(t);
       return '<div class="task-row">' +
         '<div class="task-info">' +
           '<div class="task-name">' + esc(t.name) + '</div>' +
           '<div class="task-schedule">' + esc(sched) + '</div>' +
         '</div>' +
         '<div class="task-actions">' +
+          '<button class="task-btn" onclick="editTask(\'' + t.id + '\')">Editar</button>' +
           '<button class="task-btn" onclick="toggleTask(\'' + t.id + '\',' + (!t.enabled) + ')">' + (t.enabled ? 'Pausar' : 'Activar') + '</button>' +
           '<button class="task-btn danger" onclick="deleteTask(\'' + t.id + '\')">✕</button>' +
         '</div>' +
         '</div>';
     }).join('');
   } catch (_) { el.innerHTML = '<p class="no-items">Error al cargar</p>'; }
+}
+
+function formatTaskSchedule(task) {
+  const p = task.schedule_params || {};
+  const time = String(p.hour ?? 0).padStart(2, '0') + ':' + String(p.minute ?? 0).padStart(2, '0');
+  if (task.schedule_type === 'date') {
+    const when = new Date(p.run_date);
+    return Number.isNaN(when.valueOf()) ? 'Una vez' : 'Una vez · ' + when.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
+  }
+  if (task.schedule_type === 'interval') {
+    if (p.hours) return 'Cada ' + p.hours + ' h';
+    if (p.minutes) return 'Cada ' + p.minutes + ' min';
+  }
+  const days = { mon: 'lunes', tue: 'martes', wed: 'miércoles', thu: 'jueves', fri: 'viernes', sat: 'sábado', sun: 'domingo' };
+  return p.day_of_week ? 'Cada ' + (days[p.day_of_week] || p.day_of_week) + ' · ' + time : 'Cada día · ' + time;
 }
 
 async function toggleTask(id, enabled) {
@@ -1346,6 +1372,118 @@ async function deleteTask(id) {
   if (!confirm('¿Eliminar esta tarea?')) return;
   await fetch('/api/admin/tasks/' + id, { method: 'DELETE', headers: { Authorization: 'Bearer ' + token } });
   loadTasks();
+}
+
+let editingTaskId = null;
+let adminTasks = [];
+
+function localDateTimeValue(date = new Date(Date.now() + 5 * 60000)) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function renderTaskScheduleFields(task = null) {
+  const type = document.getElementById('task-frequency').value;
+  const el = document.getElementById('task-schedule-fields');
+  const params = task ? task.schedule_params || {} : {};
+  if (type === 'date') {
+    const value = params.run_date ? localDateTimeValue(new Date(params.run_date)) : localDateTimeValue();
+    el.innerHTML = '<label class="task-field-label" for="task-date">Fecha y hora (hora local)</label><input id="task-date" type="datetime-local" value="' + value + '" required>';
+  } else if (type === 'daily') {
+    const value = String(params.hour ?? 9).padStart(2, '0') + ':' + String(params.minute ?? 0).padStart(2, '0');
+    el.innerHTML = '<label class="task-field-label" for="task-time">Hora (hora local)</label><input id="task-time" type="time" value="' + value + '" required>';
+  } else if (type === 'weekly') {
+    const value = String(params.hour ?? 9).padStart(2, '0') + ':' + String(params.minute ?? 0).padStart(2, '0');
+    const day = params.day_of_week || 'mon';
+    el.innerHTML = '<label class="task-field-label">Día y hora (hora local)</label><select id="task-day"><option value="mon">Lunes</option><option value="tue">Martes</option><option value="wed">Miércoles</option><option value="thu">Jueves</option><option value="fri">Viernes</option><option value="sat">Sábado</option><option value="sun">Domingo</option></select><input id="task-time" type="time" value="' + value + '" required>';
+    document.getElementById('task-day').value = day;
+  } else {
+    const amount = params.hours || params.minutes || 1;
+    const unit = params.hours ? 'hours' : 'minutes';
+    el.innerHTML = '<label class="task-field-label">Repetir cada</label><input id="task-interval" type="number" min="1" max="999" value="' + amount + '" required><select id="task-interval-unit"><option value="hours">horas</option><option value="minutes">minutos</option></select>';
+    document.getElementById('task-interval-unit').value = unit;
+  }
+}
+
+function taskScheduleFromForm() {
+  const type = document.getElementById('task-frequency').value;
+  if (type === 'date') {
+    const value = document.getElementById('task-date').value;
+    if (!value) throw new Error('Elige la fecha y la hora.');
+    const date = new Date(value);
+    if (date <= new Date()) throw new Error('La fecha debe ser futura.');
+    return { schedule_type: 'date', schedule_params: { run_date: date.toISOString() } };
+  }
+  if (type === 'interval') {
+    const amount = Number(document.getElementById('task-interval').value);
+    if (!Number.isInteger(amount) || amount < 1) throw new Error('Indica un intervalo válido.');
+    return { schedule_type: 'interval', schedule_params: { [document.getElementById('task-interval-unit').value]: amount } };
+  }
+  const [hour, minute] = document.getElementById('task-time').value.split(':').map(Number);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) throw new Error('Elige una hora válida.');
+  const params = { hour, minute };
+  if (type === 'weekly') params.day_of_week = document.getElementById('task-day').value;
+  return { schedule_type: 'cron', schedule_params: params };
+}
+
+function setTaskFormStatus(message = '', error = false) {
+  const el = document.getElementById('task-form-status');
+  el.textContent = message;
+  el.classList.toggle('error', error);
+}
+
+function resetTaskForm() {
+  editingTaskId = null;
+  document.getElementById('task-form').reset();
+  document.getElementById('task-frequency').value = 'date';
+  renderTaskScheduleFields();
+  document.getElementById('task-save-btn').textContent = 'Crear recordatorio';
+  document.getElementById('task-cancel-btn').classList.add('hidden');
+  setTaskFormStatus('');
+}
+
+function cancelTaskEdit() { resetTaskForm(); }
+
+function editTask(id) {
+  const task = adminTasks.find(t => t.id === id);
+  if (!task) return;
+  editingTaskId = id;
+  document.getElementById('task-name').value = task.name || '';
+  document.getElementById('task-prompt').value = task.prompt || '';
+  const frequency = task.schedule_type === 'date' ? 'date'
+    : task.schedule_type === 'interval' ? 'interval'
+      : task.schedule_params?.day_of_week ? 'weekly' : 'daily';
+  document.getElementById('task-frequency').value = frequency;
+  renderTaskScheduleFields(task);
+  document.getElementById('task-save-btn').textContent = 'Guardar cambios';
+  document.getElementById('task-cancel-btn').classList.remove('hidden');
+  setTaskFormStatus('Editando recordatorio.');
+  document.getElementById('task-name').focus();
+}
+
+async function saveTask(event) {
+  event.preventDefault();
+  try {
+    const schedule = taskScheduleFromForm();
+    const body = {
+      name: document.getElementById('task-name').value.trim(),
+      prompt: document.getElementById('task-prompt').value.trim(),
+      ...schedule,
+    };
+    if (!body.name || !body.prompt) throw new Error('Escribe un título y el mensaje.');
+    const wasEditing = Boolean(editingTaskId);
+    const path = wasEditing ? '/api/admin/tasks/' + editingTaskId : '/api/admin/tasks';
+    const response = await fetch(path, {
+      method: wasEditing ? 'PUT' : 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'No se pudo guardar el recordatorio.');
+    resetTaskForm();
+    setTaskFormStatus(wasEditing ? 'Recordatorio actualizado.' : 'Recordatorio creado.');
+    await loadTasks();
+  } catch (error) { setTaskFormStatus(error.message || 'No se pudo guardar.', true); }
 }
 
 // ─── Telegram ────────────────────────────────────────────────────────────────

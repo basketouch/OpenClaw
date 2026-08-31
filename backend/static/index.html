@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Alex — OpenClaw</title>
-  <link rel="stylesheet" href="/style.css?v=28">
+  <link rel="stylesheet" href="/style.css?v=29">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" href="/icon.png" type="image/png">
@@ -61,7 +61,7 @@
           </button>
           <span class="hdr-icon">⚡</span>
           <div>
-            <div class="hdr-title">Alex</div>
+            <div id="app-title" class="hdr-title">Alex - Nueva conversación</div>
             <span class="hdr-sub" id="chat-title-hdr">General</span>
           </div>
         </div>
@@ -131,7 +131,23 @@
       <div id="admin-containers">…</div>
     </div>
     <div class="admin-section">
-      <div class="admin-section-title" onclick="toggleSection(this)">Tareas programadas</div>
+      <div class="admin-section-title" onclick="toggleSection(this)">Recordatorios por Telegram</div>
+      <form id="task-form" class="task-form" onsubmit="saveTask(event)">
+        <input id="task-name" maxlength="100" placeholder="Título del recordatorio" required>
+        <textarea id="task-prompt" rows="3" maxlength="1200" placeholder="Mensaje o instrucción para Alex" required></textarea>
+        <select id="task-frequency" onchange="renderTaskScheduleFields()">
+          <option value="date">Una vez</option>
+          <option value="daily">Cada día</option>
+          <option value="weekly">Cada semana</option>
+          <option value="interval">Cada cierto tiempo</option>
+        </select>
+        <div id="task-schedule-fields" class="task-schedule-fields"></div>
+        <div class="task-form-actions">
+          <button id="task-save-btn" class="admin-btn task-save-btn" type="submit">Crear recordatorio</button>
+          <button id="task-cancel-btn" class="task-btn hidden" type="button" onclick="cancelTaskEdit()">Cancelar</button>
+        </div>
+        <p id="task-form-status" class="task-form-status" aria-live="polite"></p>
+      </form>
       <div id="admin-tasks">…</div>
     </div>
     <div class="admin-section">
@@ -155,7 +171,7 @@
   </div>
 </div>
 
-  <script src="/app.js?v=36"></script>
+  <script src="/app.js?v=37"></script>
 <script src="/mode.js?v=1"></script>
 </body>
 </html>

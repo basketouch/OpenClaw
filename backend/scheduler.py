@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 log = logging.getLogger(__name__)
@@ -45,6 +46,8 @@ def _make_trigger(schedule_type: str, params: dict):
         return CronTrigger(**params, timezone=_timezone_name())
     if schedule_type == "interval":
         return IntervalTrigger(**params)
+    if schedule_type == "date":
+        return DateTrigger(**params, timezone=_timezone_name())
     raise ValueError(f"Tipo de schedule desconocido: {schedule_type}")
 
 
@@ -130,6 +133,11 @@ async def _run_job(job_id: str, name: str, prompt: str):
     except Exception as exc:
         log.warning("Telegram notification failed: %s", exc)
 
+    # A one-time reminder should not return after a server restart.
+    jobs = _load_jobs()
+    if any(job.get("id") == job_id and job.get("schedule_type") == "date" for job in jobs):
+        _save_jobs([job for job in jobs if job.get("id") != job_id])
+
 
 def _reload_jobs():
     for job in _scheduler.get_jobs():
@@ -166,6 +174,10 @@ def stop():
 
 
 def create_job(name: str, prompt: str, schedule_type: str, schedule_params: dict) -> dict:
+    name = name.strip()
+    prompt = prompt.strip()
+    if not name or not prompt:
+        raise ValueError("El título y el mensaje son obligatorios")
     _make_trigger(schedule_type, schedule_params)
     job = {
         "id": str(uuid.uuid4())[:8],
@@ -210,3 +222,24 @@ def toggle_job(job_id: str, enabled: bool) -> bool:
             _reload_jobs()
             return True
     return False
+
+
+def update_job(job_id: str, name: str, prompt: str, schedule_type: str, schedule_params: dict) -> dict | None:
+    name = name.strip()
+    prompt = prompt.strip()
+    if not name or not prompt:
+        raise ValueError("El título y el mensaje son obligatorios")
+    _make_trigger(schedule_type, schedule_params)
+    jobs = _load_jobs()
+    for job in jobs:
+        if job["id"] == job_id:
+            job.update({
+                "name": name,
+                "prompt": prompt,
+                "schedule_type": schedule_type,
+                "schedule_params": schedule_params,
+            })
+            _save_jobs(jobs)
+            _reload_jobs()
+            return job
+    return None
