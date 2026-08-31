@@ -211,6 +211,56 @@ async def read_notion_data_source(data_source_id: str) -> dict:
     }
 
 
+_NEW_PROPERTY_TYPES = {
+    "rich_text": {"rich_text": {}},
+    "date": {"date": {}},
+    "select": {"select": {}},
+    "multi_select": {"multi_select": {}},
+    "number": {"number": {"format": "number"}},
+    "checkbox": {"checkbox": {}},
+    "url": {"url": {}},
+}
+
+
+async def add_notion_data_source_properties(data_source_id: str, properties: list[dict[str, str]]) -> dict:
+    """Add new Notion data-source properties without modifying existing ones."""
+    if not isinstance(properties, list) or not properties:
+        return {"ok": False, "error": "Debes indicar al menos una columna nueva"}
+    if len(properties) > 10:
+        return {"ok": False, "error": "Puedes añadir un máximo de 10 columnas por operación"}
+
+    data_source = await _request("GET", f"/data_sources/{data_source_id}")
+    existing = _data_source_schema(data_source)
+    payload: dict[str, dict] = {}
+    added: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+
+    for item in properties:
+        name = str((item or {}).get("name", "")).strip()
+        kind = str((item or {}).get("type", "")).strip()
+        if not name or len(name) > 100:
+            skipped.append({"name": name or "(sin nombre)", "reason": "El nombre debe tener entre 1 y 100 caracteres"})
+        elif kind not in _NEW_PROPERTY_TYPES:
+            skipped.append({"name": name, "reason": f"Tipo no permitido: {kind}"})
+        elif name in existing or name in payload:
+            skipped.append({"name": name, "reason": "La columna ya existe"})
+        else:
+            payload[name] = _NEW_PROPERTY_TYPES[kind]
+            added.append({"name": name, "type": kind})
+
+    if not payload:
+        return {"ok": True, "data_source_id": data_source_id, "added": [], "skipped": skipped, "properties": existing}
+
+    updated = await _request("PATCH", f"/data_sources/{data_source_id}", {"properties": payload})
+    return {
+        "ok": True,
+        "data_source_id": data_source_id,
+        "added": added,
+        "skipped": skipped,
+        "properties": _data_source_schema(updated),
+    }
+
+
 def _database_properties(schema: dict[str, str], title: str | None, fields: dict[str, Any]) -> dict:
     result: dict[str, Any] = {}
     title_name = next((name for name, kind in schema.items() if kind == "title"), None)
@@ -843,6 +893,31 @@ READ_DATA_SOURCE_DEF = {
     "name": "read_notion_data_source",
     "description": "Lee el esquema real de una base de datos de Notion antes de crear un registro. Úsala después de localizar la base con search_notion.",
     "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}}, "required": ["data_source_id"]},
+}
+
+ADD_DATA_SOURCE_PROPERTIES_DEF = {
+    "name": "add_notion_data_source_properties",
+    "description": "Añade columnas NUEVAS a una base de Notion. Úsala solo si Jorge ha pedido explícitamente añadir campos y después de leer el esquema. Nunca borra, renombra ni cambia el tipo de columnas existentes; las columnas ya presentes se omiten.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "data_source_id": {"type": "string"},
+            "properties": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "type": {"type": "string", "enum": ["rich_text", "date", "select", "multi_select", "number", "checkbox", "url"]},
+                    },
+                    "required": ["name", "type"],
+                },
+            },
+        },
+        "required": ["data_source_id", "properties"],
+    },
 }
 
 CREATE_DATABASE_RECORD_DEF = {
