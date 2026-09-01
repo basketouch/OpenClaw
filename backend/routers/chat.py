@@ -188,18 +188,10 @@ def _route_scope(request: ChatRequest) -> tuple[str, str | None]:
 
 def _select_model(request: ChatRequest, mode: str) -> tuple[str, str]:
     settings = get_settings()
-    if mode == "english":
-        return settings.english_model, "low"
-
-    text = _last_user_text(request).lower()
-    complex_markers = (
-        "debug", "refactor", "arquitectura", "analiza a fondo", "investiga a fondo",
-        "revisa el código", "revisa el codigo", "diseña", "diseña una arquitectura",
-    )
-    is_complex = mode == "admin" or len(text) > 2500 or any(x in text for x in complex_markers)
-    if is_complex:
-        return settings.alex_complex_model, "medium"
-    return settings.alex_model, "low"
+    # Use the strongest configured model for every assistant context. OpenClaw
+    # often handles multi-step work, including structured Notion operations,
+    # where consistent tool use matters more than the speed of a light model.
+    return settings.alex_complex_model, "medium"
 
 
 def _profile_for_mode(mode: str, workspace_id: str = "general", project_id: str | None = None) -> str:
