@@ -60,6 +60,21 @@ _NOTION_CREATION_TOOLS = {
     "create_notion_page", "create_notion_database",
 }
 
+_NOTION_EDITING_TOOLS = {
+    "update_notion_block", "update_notion_page_markdown", "replace_notion_page_content",
+    "move_notion_page", "set_notion_page_trash",
+}
+
+_NOTION_TOOLS = {
+    "search_notion", "read_notion_page", "create_notion_page", "create_notion_database",
+    "append_notion_note", "append_notion_rich_blocks", "update_notion_block",
+    "update_notion_page_markdown", "replace_notion_page_content", "move_notion_page",
+    "set_notion_page_trash", "read_notion_data_source", "add_notion_data_source_properties",
+    "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
+    "upsert_notion_action", "prepare_notion_destructive_change", "confirm_notion_destructive_change",
+    "cancel_notion_destructive_change",
+}
+
 
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
@@ -113,7 +128,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
 
 
 def get_profile_tools(profile: str) -> list[dict]:
-    return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]))
+    return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]) | _NOTION_TOOLS)
 
 
 from tools.datetime_tool import DEFINITION as DATETIME_DEF
@@ -156,10 +171,10 @@ from tools.english_tool import (
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
-    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, READ_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
+    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, UPDATE_BLOCK_DEF, UPDATE_PAGE_MARKDOWN_DEF, REPLACE_PAGE_CONTENT_DEF, MOVE_PAGE_DEF, SET_PAGE_TRASH_DEF, READ_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
     PREPARE_DESTRUCTIVE_CHANGE_DEF, CONFIRM_DESTRUCTIVE_CHANGE_DEF, CANCEL_DESTRUCTIVE_CHANGE_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
-    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, read_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
+    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, update_notion_block, update_notion_page_markdown, replace_notion_page_content, move_notion_page, set_notion_page_trash, read_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
     prepare_notion_destructive_change, confirm_notion_destructive_change, cancel_notion_destructive_change,
 )
 
@@ -196,6 +211,11 @@ register("create_notion_page", create_notion_page, NOTION_CREATE_PAGE_DEF)
 register("get_hornbills_hub", get_hornbills_hub, HORNBILLS_HUB_DEF)
 register("append_notion_note", append_notion_note, APPEND_NOTE_DEF)
 register("append_notion_rich_blocks", append_notion_rich_blocks, APPEND_RICH_BLOCKS_DEF)
+register("update_notion_block", update_notion_block, UPDATE_BLOCK_DEF)
+register("update_notion_page_markdown", update_notion_page_markdown, UPDATE_PAGE_MARKDOWN_DEF)
+register("replace_notion_page_content", replace_notion_page_content, REPLACE_PAGE_CONTENT_DEF)
+register("move_notion_page", move_notion_page, MOVE_PAGE_DEF)
+register("set_notion_page_trash", set_notion_page_trash, SET_PAGE_TRASH_DEF)
 register("prepare_notion_destructive_change", prepare_notion_destructive_change, PREPARE_DESTRUCTIVE_CHANGE_DEF)
 register("confirm_notion_destructive_change", confirm_notion_destructive_change, CONFIRM_DESTRUCTIVE_CHANGE_DEF)
 register("cancel_notion_destructive_change", cancel_notion_destructive_change, CANCEL_DESTRUCTIVE_CHANGE_DEF)

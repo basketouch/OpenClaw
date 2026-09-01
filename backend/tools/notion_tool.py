@@ -500,6 +500,71 @@ async def append_notion_rich_blocks(
     return {"ok": True, "appended": len(rich_blocks), "page_id": page_id, "result": result}
 
 
+async def update_notion_block(block_id: str, block: dict[str, Any]) -> dict:
+    """Update one supported Notion block while preserving its block type."""
+    current = await _request("GET", f"/blocks/{block_id}")
+    current_type = current.get("type", "")
+    requested_type = str((block or {}).get("type", "")).strip()
+    if current_type not in _RICH_BLOCK_TYPES or current_type in {"divider", "table"}:
+        return {"ok": False, "error": f"El bloque {current_type or 'desconocido'} no admite esta edición directa"}
+    if requested_type != current_type:
+        return {"ok": False, "error": f"El bloque es de tipo {current_type}; no se puede convertir en {requested_type or 'otro tipo'}"}
+    normalised = _normalise_rich_block(block)
+    updated = await _request("PATCH", f"/blocks/{block_id}", {current_type: normalised[current_type]})
+    return {"ok": True, "block": _block_preview(updated)}
+
+
+async def update_notion_page_markdown(page_id: str, updates: list[dict[str, str]]) -> dict:
+    """Make precise formatted text replacements in an existing Notion page."""
+    if not isinstance(updates, list) or not updates or len(updates) > 20:
+        return {"ok": False, "error": "Indica entre 1 y 20 sustituciones"}
+    content_updates = []
+    for item in updates:
+        old_str = str((item or {}).get("old_str", ""))
+        new_str = str((item or {}).get("new_str", ""))
+        if not old_str:
+            return {"ok": False, "error": "Cada sustitución necesita old_str"}
+        content_updates.append({"old_str": old_str, "new_str": new_str})
+    result = await _request("PATCH", f"/pages/{page_id}/markdown", {
+        "type": "update_content",
+        "update_content": {"content_updates": content_updates},
+    })
+    return {"ok": True, "page_id": page_id, "updated": len(content_updates), "result": result}
+
+
+async def replace_notion_page_content(page_id: str, markdown: str) -> dict:
+    """Replace page content with enhanced Markdown after an explicit user instruction."""
+    if not markdown.strip():
+        return {"ok": False, "error": "El contenido nuevo no puede estar vacío"}
+    result = await _request("PATCH", f"/pages/{page_id}/markdown", {
+        "type": "replace_content",
+        "replace_content": {"new_str": markdown},
+    })
+    return {"ok": True, "page_id": page_id, "result": result}
+
+
+async def move_notion_page(page_id: str, parent_id: str, parent_type: str = "page_id") -> dict:
+    """Move a Notion page under another page or into a data source."""
+    if parent_type not in {"page_id", "data_source_id"}:
+        return {"ok": False, "error": "parent_type debe ser page_id o data_source_id"}
+    page = await _request("GET", f"/pages/{page_id}")
+    if parent_type == "page_id":
+        await _request("GET", f"/pages/{parent_id}")
+        parent = {"type": "page_id", "page_id": parent_id}
+    else:
+        await _request("GET", f"/data_sources/{parent_id}")
+        parent = {"type": "data_source_id", "data_source_id": parent_id}
+    moved = await _request("POST", f"/pages/{page_id}/move", {"parent": parent})
+    return {"ok": True, "page": _page_summary(moved or page), "parent": parent}
+
+
+async def set_notion_page_trash(page_id: str, in_trash: bool) -> dict:
+    """Send a page to Notion trash or restore it."""
+    page = await _request("GET", f"/pages/{page_id}")
+    updated = await _request("PATCH", f"/pages/{page_id}", {"in_trash": bool(in_trash)})
+    return {"ok": True, "page": _page_summary(updated or page), "in_trash": bool(in_trash)}
+
+
 def _load_destructive_plans() -> dict[str, Any]:
     try:
         with open(_DESTRUCTIVE_PLANS_PATH, encoding="utf-8") as file:
@@ -930,6 +995,50 @@ APPEND_RICH_BLOCKS_DEF = {
         },
         "required": ["page_id"],
     },
+}
+
+UPDATE_BLOCK_DEF = {
+    "name": "update_notion_block",
+    "description": "Edita un bloque existente de Notion conservando su formato y tipo (título, párrafo, lista, check, cita o callout). Lee primero la página, identifica el bloque exacto y úsala para corregir o reescribir ese bloque; no añadas texto plano duplicado.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "block_id": {"type": "string"},
+            "block": {"type": "object", "description": "Debe conservar el mismo type del bloque actual y usar text, checked, icon, color o url cuando corresponda."},
+        },
+        "required": ["block_id", "block"],
+    },
+}
+
+UPDATE_PAGE_MARKDOWN_DEF = {
+    "name": "update_notion_page_markdown",
+    "description": "Sustituye texto o Markdown de forma precisa dentro de una página de Notion. Lee primero el contenido y usa old_str exacto para no reescribir ni duplicar el resto de la página. Conserva formato enriquecido de Notion.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "page_id": {"type": "string"},
+            "updates": {"type": "array", "minItems": 1, "maxItems": 20, "items": {"type": "object", "properties": {"old_str": {"type": "string"}, "new_str": {"type": "string"}}, "required": ["old_str", "new_str"]}},
+        },
+        "required": ["page_id", "updates"],
+    },
+}
+
+REPLACE_PAGE_CONTENT_DEF = {
+    "name": "replace_notion_page_content",
+    "description": "Reemplaza todo el contenido de una página por Markdown enriquecido. Úsala ÚNICAMENTE si Jorge ha pedido claramente rehacer o sustituir toda la página; primero lee la página y describe brevemente qué se sustituirá. No permite borrar páginas hijas o bases de datos.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "markdown": {"type": "string"}}, "required": ["page_id", "markdown"]},
+}
+
+MOVE_PAGE_DEF = {
+    "name": "move_notion_page",
+    "description": "Mueve una página de Notion a una página padre concreta o a una base concreta. Úsala solo cuando Jorge haya indicado claramente el destino; verifica origen y destino antes de mover.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "parent_id": {"type": "string"}, "parent_type": {"type": "string", "enum": ["page_id", "data_source_id"]}}, "required": ["page_id", "parent_id"]},
+}
+
+SET_PAGE_TRASH_DEF = {
+    "name": "set_notion_page_trash",
+    "description": "Manda una página de Notion a la papelera o la restaura. Úsala solo tras una instrucción inequívoca de Jorge para borrar o restaurar esa página concreta; confirma el título y el efecto antes de ejecutarla.",
+    "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "in_trash": {"type": "boolean"}}, "required": ["page_id", "in_trash"]},
 }
 
 PREPARE_DESTRUCTIVE_CHANGE_DEF = {
