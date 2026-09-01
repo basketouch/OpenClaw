@@ -14,7 +14,7 @@ from config import get_settings
 _NOTION_API = "https://api.notion.com/v1"
 _NOTION_VERSION = "2026-03-11"
 _DESTRUCTIVE_PLANS_PATH = "/data/notion_destructive_plans.json"
-_DESTRUCTIVE_PLAN_TTL_SECONDS = 15 * 60
+_DESTRUCTIVE_PLAN_TTL_SECONDS = 24 * 60 * 60
 _active_confirmation_message: contextvars.ContextVar[str] = contextvars.ContextVar(
     "active_notion_confirmation_message", default=""
 )
@@ -566,11 +566,16 @@ async def set_notion_page_trash(page_id: str, in_trash: bool) -> dict:
 
 
 def _load_destructive_plans() -> dict[str, Any]:
-    try:
-        with open(_DESTRUCTIVE_PLANS_PATH, encoding="utf-8") as file:
-            data = json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    data: dict[str, Any] = {}
+    for path in _destructive_plan_paths():
+        try:
+            with open(path, encoding="utf-8") as file:
+                stored = json.load(file)
+            if isinstance(stored, dict):
+                for plan_id, plan in stored.items():
+                    data.setdefault(plan_id, plan)
+        except (FileNotFoundError, json.JSONDecodeError):
+            continue
     now = time.time()
     plans = {plan_id: plan for plan_id, plan in data.items() if plan.get("expires_at", 0) > now}
     if plans != data:
@@ -578,12 +583,27 @@ def _load_destructive_plans() -> dict[str, Any]:
     return plans
 
 
+def _destructive_plan_paths() -> list[str]:
+    workspace_path = get_settings().workspace_path.rstrip("/")
+    backup_path = f"{workspace_path}/notion_destructive_plans.json"
+    return list(dict.fromkeys([_DESTRUCTIVE_PLANS_PATH, backup_path]))
+
+
 def _save_destructive_plans(plans: dict[str, Any]) -> None:
-    os.makedirs(os.path.dirname(_DESTRUCTIVE_PLANS_PATH), exist_ok=True)
-    temporary = f"{_DESTRUCTIVE_PLANS_PATH}.{secrets.token_hex(4)}.tmp"
-    with open(temporary, "w", encoding="utf-8") as file:
-        json.dump(plans, file, ensure_ascii=False)
-    os.replace(temporary, _DESTRUCTIVE_PLANS_PATH)
+    saved = False
+    errors = []
+    for path in _destructive_plan_paths():
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            temporary = f"{path}.{secrets.token_hex(4)}.tmp"
+            with open(temporary, "w", encoding="utf-8") as file:
+                json.dump(plans, file, ensure_ascii=False)
+            os.replace(temporary, path)
+            saved = True
+        except OSError as exc:
+            errors.append(str(exc))
+    if not saved:
+        raise RuntimeError("No se pudo guardar el plan de confirmación: " + "; ".join(errors))
 
 
 def _block_preview(block: dict[str, Any]) -> dict[str, Any]:
