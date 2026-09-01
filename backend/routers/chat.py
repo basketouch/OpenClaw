@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 
@@ -12,12 +13,17 @@ from pydantic import BaseModel
 from auth import verify_token
 from config import get_openai_client, get_settings
 from context_profiles import instructions_for_context
-from tools.notion_tool import reset_notion_confirmation_message, set_notion_confirmation_message
+from tools.notion_tool import (
+    confirm_notion_destructive_change,
+    reset_notion_confirmation_message,
+    set_notion_confirmation_message,
+)
 from tools.registry import execute_tool, get_profile_tools
 
 router = APIRouter(prefix="/api", tags=["chat"])
 _DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 _USAGE_FILE = "/data/ai_usage.jsonl"
+_NOTION_CONFIRMATION_RE = re.compile(r"^CONFIRMAR\s+([A-Z0-9]{6,20})\s+PASO\s+([12])$", re.IGNORECASE)
 
 _ALEX_BASE = """Eres Alex, el asistente operativo personal de Jorge.
 
@@ -318,6 +324,29 @@ async def _run_openai(request: ChatRequest):
 
 
 async def _run_openai_with_confirmation(request: ChatRequest):
+    confirmation_text = " ".join(_last_user_text(request).split())
+    confirmation_match = _NOTION_CONFIRMATION_RE.fullmatch(confirmation_text)
+    if confirmation_match:
+        plan_id = confirmation_match.group(1).upper()
+        yield f"data: {json.dumps({'type': 'tool_start', 'name': 'confirm_notion_destructive_change'}, ensure_ascii=False)}\n\n"
+        try:
+            result = await confirm_notion_destructive_change(plan_id)
+            if result.get("ok") and result.get("first_confirmation_recorded"):
+                text = (
+                    "Primera confirmación registrada. No se ha modificado Notion todavía.\n\n"
+                    f"**Paso 2:** responde exactamente:\n\n`{result['second_confirmation']}`"
+                )
+            elif result.get("ok") and result.get("executed"):
+                text = "Cambio realizado en Notion. Los bloques originales están en la papelera y se pueden restaurar."
+            else:
+                text = result.get("error", "No se pudo aplicar la confirmación de Notion.")
+        except Exception as exc:
+            text = f"Error al confirmar el cambio de Notion: {exc}"
+        yield f"data: {json.dumps({'type': 'tool_done', 'name': 'confirm_notion_destructive_change'}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'text', 'content': text}, ensure_ascii=False)}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'mode': request.mode, 'workspace_id': request.workspace_id, 'project_id': request.project_id})}\n\n"
+        return
+
     settings = get_settings()
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY no está configurada")
