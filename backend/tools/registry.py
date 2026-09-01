@@ -56,6 +56,10 @@ _NOTION_SCHEMA_TOOLS = {
     "read_notion_data_source", "add_notion_data_source_properties",
 }
 
+_NOTION_CREATION_TOOLS = {
+    "create_notion_page", "create_notion_database",
+}
+
 
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
@@ -63,7 +67,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "web_search",
         "search_notion", "read_notion_page", "append_notion_note", "append_notion_rich_blocks",
         "query_notion_actions", "upsert_notion_action",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "communications": {
         "get_datetime", "list_email_accounts", "list_emails", "search_emails", "read_email",
         "send_email", "reply_email", "send_telegram",
@@ -79,32 +83,32 @@ TOOL_PROFILES: dict[str, set[str]] = {
         "get_datetime", "save_english_phrase", "search_english_phrases", "get_english_review",
         "record_english_result", "get_english_progress",
         "search_notion", "read_notion_page", "create_notion_page",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "hornbills": {
         "get_datetime", "search_notion", "read_notion_page", "get_hornbills_hub", "get_hornbills_destinations",
         "read_notion_data_source", "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "query_notion_actions",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "cutsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_cutsports_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "drawsports": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_drawsports_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "the_analyst": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_the_analyst_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "comunidad": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_comunidad_destinations",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
     "basketouch_hub": {
         "get_datetime", "search_notion", "read_notion_page", "read_notion_data_source",
         "create_notion_database_record", "update_notion_database_record", "append_notion_rich_blocks", "get_basketouch_hub_destinations",
         "query_notion_actions", "upsert_notion_action",
-    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _SCHEDULED_TASK_TOOLS,
+    } | _ENGLISH_COACH_TOOLS | _NOTION_BLOCK_CHANGE_TOOLS | _NOTION_SCHEMA_TOOLS | _NOTION_CREATION_TOOLS | _SCHEDULED_TASK_TOOLS,
 }
 
 
@@ -152,10 +156,10 @@ from tools.english_tool import (
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
-    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, READ_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
+    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, READ_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
     PREPARE_DESTRUCTIVE_CHANGE_DEF, CONFIRM_DESTRUCTIVE_CHANGE_DEF, CANCEL_DESTRUCTIVE_CHANGE_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
-    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, read_notion_data_source, add_notion_data_source_properties, create_notion_database_record, update_notion_database_record,
+    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, read_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
     prepare_notion_destructive_change, confirm_notion_destructive_change, cancel_notion_destructive_change,
 )
 
@@ -203,6 +207,7 @@ register("get_comunidad_destinations", get_comunidad_destinations, COMUNIDAD_DES
 register("get_basketouch_hub_destinations", get_basketouch_hub_destinations, BASKETOUCH_HUB_DESTINATIONS_DEF)
 register("read_notion_data_source", read_notion_data_source, READ_DATA_SOURCE_DEF)
 register("add_notion_data_source_properties", add_notion_data_source_properties, ADD_DATA_SOURCE_PROPERTIES_DEF)
+register("create_notion_database", create_notion_database, CREATE_DATABASE_DEF)
 register("create_notion_database_record", create_notion_database_record, CREATE_DATABASE_RECORD_DEF)
 register("update_notion_database_record", update_notion_database_record, UPDATE_DATABASE_RECORD_DEF)
 register("query_notion_actions", query_notion_actions, NOTION_QUERY_ACTIONS_DEF)

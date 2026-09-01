@@ -167,6 +167,54 @@ async def create_notion_page(
     return {"ok": True, "page": _page_summary(page), "blocks_created": len(children)}
 
 
+async def create_notion_database(
+    parent_page_id: str, title: str, properties: list[dict[str, str]], description: str = "",
+) -> dict:
+    """Create a Notion database under an explicit shared parent page."""
+    title = title.strip()
+    if not title:
+        return {"ok": False, "error": "title vacío"}
+    if not isinstance(properties, list) or len(properties) > 20:
+        return {"ok": False, "error": "Indica entre 0 y 20 propiedades"}
+
+    schema: dict[str, dict] = {}
+    skipped: list[dict[str, str]] = []
+    for item in properties:
+        name = str((item or {}).get("name", "")).strip()
+        kind = str((item or {}).get("type", "")).strip()
+        if not name or len(name) > 100:
+            skipped.append({"name": name or "(sin nombre)", "reason": "El nombre debe tener entre 1 y 100 caracteres"})
+        elif kind not in _CREATE_DATABASE_PROPERTY_TYPES:
+            skipped.append({"name": name, "reason": f"Tipo no permitido: {kind}"})
+        elif name in schema:
+            skipped.append({"name": name, "reason": "La propiedad está repetida"})
+        else:
+            schema[name] = _CREATE_DATABASE_PROPERTY_TYPES[kind]
+
+    if not any("title" in item for item in schema.values()):
+        schema = {"Name": {"title": {}}, **schema}
+
+    payload: dict[str, Any] = {
+        "parent": {"type": "page_id", "page_id": parent_page_id},
+        "title": _rich_text(title),
+        "initial_data_source": {"properties": schema},
+    }
+    if description.strip():
+        payload["description"] = _rich_text(description.strip())
+    database = await _request("POST", "/databases", payload)
+    return {
+        "ok": True,
+        "database": {
+            "id": database.get("id"),
+            "title": _plain_text(database.get("title")) or title,
+            "url": database.get("url"),
+            "data_sources": database.get("data_sources", []),
+        },
+        "properties": _data_source_schema((database.get("data_sources") or [{}])[0]) if database.get("data_sources") else schema,
+        "skipped": skipped,
+    }
+
+
 async def get_hornbills_hub() -> dict:
     """Return the configured Hornbills hub, or locate its shared Notion page."""
     configured_id = get_settings().notion_hornbills_hub_page_id
@@ -219,6 +267,11 @@ _NEW_PROPERTY_TYPES = {
     "number": {"number": {"format": "number"}},
     "checkbox": {"checkbox": {}},
     "url": {"url": {}},
+}
+
+_CREATE_DATABASE_PROPERTY_TYPES = {
+    "title": {"title": {}},
+    **_NEW_PROPERTY_TYPES,
 }
 
 
@@ -819,6 +872,32 @@ CREATE_PAGE_DEF = {
     "name": "create_notion_page",
     "description": "Crea una página hija en Notion con contenido enriquecido opcional. Confirma con Jorge antes de crearla salvo que él haya pedido claramente crear esa página concreta.",
     "input_schema": {"type": "object", "properties": {"parent_page_id": {"type": "string"}, "title": {"type": "string"}, "content": {"type": "string"}, "template": {"type": "string", "enum": ["hornbills_review", "product_update", "marketing_proposal", "action", "structured_note"]}, "sections": {"type": "object", "additionalProperties": {}}, "blocks": {"type": "array", "items": {"type": "object", "additionalProperties": {}}}}, "required": ["parent_page_id", "title"]},
+}
+
+CREATE_DATABASE_DEF = {
+    "name": "create_notion_database",
+    "description": "Crea una base de datos nueva como hija de una página concreta de Notion. Úsala solo cuando Jorge haya pedido explícitamente crear esa base, con nombre y ubicación claros. Nunca la crees en Backlog u otra página por suposición.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "parent_page_id": {"type": "string"},
+            "title": {"type": "string"},
+            "description": {"type": "string"},
+            "properties": {
+                "type": "array",
+                "maxItems": 20,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string"},
+                        "type": {"type": "string", "enum": ["title", "rich_text", "date", "select", "multi_select", "number", "checkbox", "url"]},
+                    },
+                    "required": ["name", "type"],
+                },
+            },
+        },
+        "required": ["parent_page_id", "title", "properties"],
+    },
 }
 
 HORNBILLS_HUB_DEF = {
