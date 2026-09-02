@@ -216,7 +216,7 @@ async def create_notion_database(
 
 
 async def get_hornbills_hub() -> dict:
-    """Return the configured Hornbills hub, or locate its shared Notion page."""
+    """Return the configured personal Hornbills hub, or locate its Notion page."""
     configured_id = get_settings().notion_hornbills_hub_page_id
     if configured_id:
         page = await _request("GET", f"/pages/{configured_id}")
@@ -227,7 +227,7 @@ async def get_hornbills_hub() -> dict:
 
 
 async def append_notion_note(page_id: str, content: str) -> dict:
-    """Append a dated, non-destructive note to an existing shared Notion page."""
+    """Append a dated, non-destructive note to an existing Notion page."""
     content = content.strip()
     if not content:
         return {"ok": False, "error": "contenido vacío"}
@@ -250,7 +250,7 @@ def _data_source_schema(data_source: dict) -> dict[str, str]:
 
 
 async def read_notion_data_source(data_source_id: str) -> dict:
-    """Read a shared Notion data source schema before creating a record."""
+    """Read a connected Notion data source schema before creating a record."""
     data_source = await _request("GET", f"/data_sources/{data_source_id}")
     return {
         "id": data_source.get("id"),

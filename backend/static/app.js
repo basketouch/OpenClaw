@@ -871,7 +871,7 @@ function hornbillsIntent(userText, responseText) {
     player: score([/jugador|player|rol|role|desarrollo|development|strength|fortaleza|minutes|minutos|lesi[oó]n/g]),
     scouting: score([/rival|opponent|scouting|game plan|contra |\bvs\b|ato|blob|slob|weakness/g]),
     practice: score([/entrenamiento|training|práctica|practice|sesión|session|preseason|pretemporada/g]),
-    staff: score([/césar|cesar|staff|head coach|reuni[oó]n|meeting|decisi[oó]n|proposal|propuesta/g]),
+    decision: score([/césar|cesar|staff|head coach|reuni[oó]n|meeting|decisi[oó]n|proposal|propuesta/g]),
   };
   return Object.entries(intents).sort((a, b) => b[1] - a[1])[0][1] ? Object.entries(intents).sort((a, b) => b[1] - a[1])[0][0] : 'video';
 }
@@ -894,19 +894,19 @@ function hornbillsActions(intent) {
       ['🎯 Guardar scouting', 'Crea o actualiza el registro de Games & Scouting correspondiente con estos patrones y prioridades.'],
       ['🛡️ Prioridades defensivas', 'Convierte esto en prioridades defensivas concretas para el game plan.'],
       ['🏀 Atacar debilidades', 'Extrae las debilidades a atacar y añádelas al scouting del rival.'],
-      ['🇬🇧 Brief para staff', 'Ayúdame a explicar este scouting en inglés claro para el staff.', 'english'],
+      ['🇬🇧 Brief en inglés', 'Ayúdame a explicar este scouting en inglés claro y directo.', 'english'],
     ],
     practice: [
       ['🏋️ Crear sesión', 'Crea un borrador de Practice Session con objetivo principal, secundarios y estado Draft.'],
       ['🎯 Definir objetivos', 'Convierte esta conversación en objetivos principales y secundarios de práctica.'],
       ['👤 Vincular jugadores', 'Identifica los jugadores que deben vincularse a esta sesión y prepara la relación.'],
-      ['🇬🇧 Explicar práctica', 'Ayúdame a explicar esta práctica en inglés claro para el staff o los jugadores.', 'english'],
+      ['🇬🇧 Explicar práctica', 'Ayúdame a explicar esta práctica en inglés claro y natural.', 'english'],
     ],
-    staff: [
-      ['🇬🇧 Pregunta para César', 'Ayúdame a formular esta pregunta para César en inglés natural y directo.', 'english'],
-      ['🤝 Propuesta de staff', 'Convierte esto en una propuesta para Staff Notes & Decisions con estado To Discuss.'],
-      ['✅ Registrar decisión', 'Si esta conversación contiene una decisión confirmada, regístrala como Decision para el staff.'],
-      ['🔒 Guardar privado', 'Guarda esta reflexión como nota privada, sin compartirla con el staff.'],
+    decision: [
+      ['🇬🇧 Preparar reunión', 'Ayúdame a preparar esto en inglés natural y directo.', 'english'],
+      ['🧭 Preparar seguimiento', 'Convierte esto en una nota personal para Decisions & Meetings.'],
+      ['✅ Registrar decisión', 'Si esta conversación contiene una decisión confirmada, regístrala en Decisions & Meetings.'],
+      ['🔒 Guardar reflexión', 'Guarda esta reflexión como nota privada.'],
     ],
   };
   return actions[intent] || actions.video;
@@ -940,7 +940,7 @@ function renderContextShortcuts(userText, responseText) {
   if (currentScope.workspace_id !== 'hornbills') return;
   if (/sesión cerrada|sesion cerrada|guardad[oa] en notion/i.test(responseText)) return;
   const intent = hornbillsIntent(userText, responseText);
-  const labels = { video: 'Vídeo y análisis', player: 'Jugador', scouting: 'Rival y scouting', practice: 'Entrenamiento', staff: 'Staff y César' };
+  const labels = { video: 'Vídeo y análisis', player: 'Jugador', scouting: 'Rival y scouting', practice: 'Entrenamiento', decision: 'Decisiones y reuniones' };
   const actions = hornbillsActions(intent);
   const el = document.createElement('div');
   el.className = 'context-shortcuts';
