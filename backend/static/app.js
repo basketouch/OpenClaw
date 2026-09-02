@@ -106,6 +106,12 @@ let openChatMenuId = null;
 let movingChatId = null;
 let renamingChatId = null;
 let collapsedSpaces = new Set(JSON.parse(localStorage.getItem('oc_collapsed_spaces') || '[]'));
+let unreadReplyChatIds = new Set(JSON.parse(localStorage.getItem('oc_unread_replies') || '[]'));
+
+function setUnreadReply(chatId, unread) {
+  if (unread) unreadReplyChatIds.add(chatId); else unreadReplyChatIds.delete(chatId);
+  localStorage.setItem('oc_unread_replies', JSON.stringify([...unreadReplyChatIds]));
+}
 
 async function loadChatList() {
   try {
@@ -132,11 +138,12 @@ function renderChatList() {
     const date = c.updated ? fmtDate(c.updated) : '';
     const editing = c.id === renamingChatId;
     const menuOpen = c.id === openChatMenuId;
+    const unread = unreadReplyChatIds.has(c.id) && c.id !== currentChatId;
     return `<div class="chat-item ${active}" onclick="loadChat('${c.id}')">
       <div class="chat-item-top">
         ${editing
           ? `<input class="chat-item-title-input" id="chat-title-input-${c.id}" value="${esc(c.title)}" maxlength="120" onclick="event.stopPropagation()" onkeydown="onRenameKey(event, '${c.id}')" onblur="saveInlineRename('${c.id}')">`
-          : `<span class="chat-item-title">${esc(c.title)}</span>`}
+          : `<span class="chat-item-title">${esc(c.title)}</span>${unread ? '<span class="chat-item-reply-dot" aria-label="Respuesta nueva" title="Respuesta nueva"></span>' : ''}`}
         <span class="chat-item-date">${date}</span>
       </div>
       ${c.preview ? `<div class="chat-item-preview">${esc(c.preview)}</div>` : ''}
@@ -294,6 +301,7 @@ async function loadChat(id) {
     if (!r.ok) return;
     const chat = await r.json();
     currentChatId = id;
+    setUnreadReply(id, false);
     history = chat.messages || [];
     currentScope = { workspace_id: chat.workspace_id || 'general', project_id: chat.project_id || null, scope_source: chat.scope_source || 'auto' };
     renderMessages();
@@ -357,17 +365,21 @@ async function saveInlineRename(id) {
 }
 
 async function saveCurrentChat() {
-  if (!currentChatId) return;
+  return saveChatSnapshot(currentChatId, history, currentScope);
+}
+
+async function saveChatSnapshot(chatId, messages, scope) {
+  if (!chatId) return;
   try {
-    await fetch(`/api/chats/${currentChatId}`, {
+    await fetch(`/api/chats/${chatId}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: history, ...currentScope }),
+      body: JSON.stringify({ messages, ...scope }),
     });
     const r = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
     chatList = (await r.json()).chats || [];
     renderChatList();
-    renderChatHeader();
+    if (currentChatId === chatId) renderChatHeader();
   } catch (_) { /* ignore */ }
 }
 
@@ -699,13 +711,19 @@ async function sendMessage() {
   const text = input.value.trim();
   if (!text && !pendingFile) return;
 
+  // A reply may finish after the user has opened another conversation. Keep it
+  // attached to the conversation that started it, then mark it as unread.
+  const responseChatId = currentChatId;
+  const responseHistory = history;
+  let responseScope = { ...currentScope };
+
   const msgText = text || ('[Archivo: ' + (pendingFile ? pendingFile.filename : '') + ']');
   input.value = '';
   resize(input);
   var welcome = document.querySelector('.welcome');
   if (welcome) welcome.remove();
 
-  history.push({ role: 'user', content: msgText });
+  responseHistory.push({ role: 'user', content: msgText });
   document.querySelectorAll('.context-shortcuts').forEach(el => el.remove());
   appendUserMsg(msgText, true, pendingFile);
 
@@ -720,8 +738,8 @@ async function sendMessage() {
   let responseText = '';
 
   try {
-    const contextMessages = history.slice(-16);
-    const body = { messages: contextMessages, ...currentScope };
+    const contextMessages = responseHistory.slice(-16);
+    const body = { messages: contextMessages, ...responseScope };
     if (nextAssistContext) body.assist_context = nextAssistContext;
     nextAssistContext = null;
     if (filePayload) {
@@ -771,7 +789,8 @@ async function sendMessage() {
         } else if (ev.type === 'done') {
           bubble.classList.remove('cursor');
           if (ev.workspace_id) {
-            currentScope = { workspace_id: ev.workspace_id, project_id: ev.project_id || null, scope_source: currentScope.scope_source };
+            responseScope = { workspace_id: ev.workspace_id, project_id: ev.project_id || null, scope_source: responseScope.scope_source };
+            if (currentChatId === responseChatId) currentScope = responseScope;
           }
         } else if (ev.type === 'error') {
           bubble.classList.remove('cursor');
@@ -782,12 +801,17 @@ async function sendMessage() {
 
     bubble.classList.remove('cursor');
     if (responseText) {
-      history.push({ role: 'assistant', content: responseText });
-      await saveCurrentChat();
-      renderContextShortcuts(msgText, responseText);
+      responseHistory.push({ role: 'assistant', content: responseText });
+      await saveChatSnapshot(responseChatId, responseHistory, responseScope);
+      if (currentChatId === responseChatId) {
+        renderContextShortcuts(msgText, responseText);
+      } else {
+        setUnreadReply(responseChatId, true);
+        renderChatList();
+      }
       const shouldSpeak = speakAfterReply;
       speakAfterReply = false;
-      if (shouldSpeak) {
+      if (shouldSpeak && currentChatId === responseChatId) {
         const listenButton = bubble.parentElement.querySelector('.listen-btn');
         if (listenButton) speakBubble(listenButton);
       }
