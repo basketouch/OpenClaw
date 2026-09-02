@@ -139,6 +139,8 @@ function renderChatList() {
     const editing = c.id === renamingChatId;
     const menuOpen = c.id === openChatMenuId;
     const unread = unreadReplyChatIds.has(c.id) && c.id !== currentChatId;
+    const orderPeers = chatList.filter(item => item.workspace_id === c.workspace_id && item.project_id === c.project_id);
+    const orderIndex = orderPeers.findIndex(item => item.id === c.id);
     return `<div class="chat-item ${active}" onclick="loadChat('${c.id}')">
       <div class="chat-item-top">
         ${editing
@@ -156,7 +158,10 @@ function renderChatList() {
            <div class="chat-action-menu-title">Proyectos</div>
            ${projectList.map(p => `<button onclick="moveChat('${c.id}', 'projects', '${p.id}')">🚀 ${esc(p.name)}</button>`).join('')}
            <button class="chat-menu-back" onclick="showChatActions('${c.id}')">‹ Volver</button>`
-        : `<button onclick="showMoveChoices('${c.id}')">Mover a…</button>
+        : `<div class="chat-action-menu-title">Orden</div>
+           <button onclick="reorderChat('${c.id}', -1)" ${orderIndex === 0 ? 'disabled' : ''}>↑ Subir</button>
+           <button onclick="reorderChat('${c.id}', 1)" ${orderIndex === orderPeers.length - 1 ? 'disabled' : ''}>↓ Bajar</button>
+           <button onclick="showMoveChoices('${c.id}')">Mover a…</button>
            <button onclick="beginRenameChat('${c.id}')">Renombrar</button>
            <button class="danger" onclick="deleteChat(event,'${c.id}')">Eliminar</button>`}
       </div>` : ''}
@@ -242,6 +247,35 @@ async function moveChat(id, workspaceId, projectId) {
     movingChatId = null;
     renderChatList();
   } catch (_) { alert('No se pudo mover la conversación.'); }
+}
+
+async function reorderChat(id, direction) {
+  const chat = chatList.find(item => item.id === id);
+  if (!chat) return;
+  const peers = chatList.filter(item =>
+    item.workspace_id === chat.workspace_id && item.project_id === chat.project_id
+  );
+  const index = peers.findIndex(item => item.id === id);
+  const target = index + direction;
+  if (target < 0 || target >= peers.length) return;
+
+  [peers[index], peers[target]] = [peers[target], peers[index]];
+  try {
+    const r = await fetch('/api/chats/order', {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ordered_ids: peers.map(item => item.id) }),
+    });
+    if (!r.ok) throw new Error('No se pudo guardar el orden');
+
+    const listResponse = await fetch('/api/chats', { headers: { Authorization: `Bearer ${token}` } });
+    const data = await listResponse.json();
+    chatList = data.chats || [];
+    openChatMenuId = null;
+    renderChatList();
+  } catch (_) {
+    alert('No se pudo guardar el orden de las conversaciones.');
+  }
 }
 
 function openNewChatPicker() {

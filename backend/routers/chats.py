@@ -96,6 +96,7 @@ def _summary(chat: dict) -> dict:
         "workspace_id": chat["workspace_id"],
         "project_id": chat.get("project_id"),
         "scope_source": chat.get("scope_source", "auto"),
+        "sort_order": chat.get("sort_order"),
     }
 
 
@@ -114,7 +115,13 @@ async def list_chats(_: str = Depends(verify_token)):
             chats.append(_summary(c))
         except Exception:
             pass
+    # The sidebar is a working index, not a chronological feed.  Keep the
+    # order selected by the user even when a conversation receives a reply.
+    # Legacy conversations retain their familiar newest-first order until the
+    # user orders that space for the first time.  Python's stable sort keeps
+    # that fallback order within any explicit manual position.
     chats.sort(key=lambda x: x["updated"], reverse=True)
+    chats.sort(key=lambda x: x["sort_order"] if x.get("sort_order") is not None else 1_000_000)
     return {"chats": chats, "workspaces": WORKSPACES, "projects": PROJECTS}
 
 
@@ -143,6 +150,9 @@ async def create_chat(body: CreateBody | None = None, _: str = Depends(verify_to
         "workspace_id": workspace_id,
         "project_id": project_id,
         "scope_source": "manual" if (workspace_id != "general" or project_id) else "auto",
+        # New conversations begin at the top of their space without changing
+        # the order of existing ones.
+        "sort_order": -1,
         "messages": [],
     }
     _save(chat)
@@ -174,6 +184,35 @@ class SaveBody(BaseModel):
 
 class RenameBody(BaseModel):
     title: str
+
+
+class OrderBody(BaseModel):
+    ordered_ids: list[str]
+
+
+@router.put("/order")
+async def order_chats(body: OrderBody, _: str = Depends(verify_token)):
+    """Persist a manually chosen order for one sidebar scope."""
+    ids = list(dict.fromkeys(body.ordered_ids))
+    if not ids:
+        raise HTTPException(400, "No se ha indicado ningún orden")
+
+    chats = []
+    for cid in ids:
+        try:
+            chats.append(_load(cid))
+        except FileNotFoundError:
+            raise HTTPException(404, "Conversación no encontrada")
+
+    first = chats[0]
+    scope = (first.get("workspace_id"), first.get("project_id"))
+    if any((chat.get("workspace_id"), chat.get("project_id")) != scope for chat in chats):
+        raise HTTPException(400, "Solo se pueden ordenar conversaciones del mismo espacio")
+
+    for index, chat in enumerate(chats):
+        chat["sort_order"] = index
+        _save(chat)
+    return {"success": True}
 
 
 @router.put("/{cid}")
