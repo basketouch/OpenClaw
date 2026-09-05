@@ -306,26 +306,38 @@ async function startNewChat(workspaceId = 'general', projectId = null) {
   const project = projectList.find(p => p.id === projectId || p.name === projectId);
   if (project) { workspaceId = 'projects'; projectId = project.id; }
   document.getElementById('new-chat-picker').classList.add('hidden');
+  // A draft is local only. It becomes a real conversation when Jorge sends
+  // the first message, so the sidebar never fills with empty placeholders.
+  currentChatId = null;
+  currentScope = { workspace_id: workspaceId, project_id: projectId, scope_source: workspaceId === 'general' && !projectId ? 'auto' : 'manual' };
+  history = [];
+  renderChatList();
+  renderChatScope(currentScope);
+  showWelcome();
+  closeSidebar();
+  document.getElementById('msg-input').focus();
+}
+
+async function createDraftChatIfNeeded() {
+  if (currentChatId) return true;
   try {
     const r = await fetch('/api/chats', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workspace_id: workspaceId, project_id: projectId }),
+      body: JSON.stringify({ workspace_id: currentScope.workspace_id, project_id: currentScope.project_id }),
     });
+    if (!r.ok) throw new Error('No se pudo crear la conversación');
     const chat = await r.json();
     chatList.unshift(chat);
     currentChatId = chat.id;
     currentScope = { workspace_id: chat.workspace_id, project_id: chat.project_id, scope_source: chat.scope_source };
-    history = [];
     renderChatList();
     renderChatScope(currentScope);
     renderChatHeader(chat);
-    showWelcome();
-    closeSidebar();
-    document.getElementById('msg-input').focus();
+    return true;
   } catch (_) {
-    history = [];
-    showWelcome();
+    alert('No se pudo iniciar la conversación. Comprueba la conexión e inténtalo de nuevo.');
+    return false;
   }
 }
 
@@ -744,6 +756,7 @@ async function sendMessage() {
   const input = document.getElementById('msg-input');
   const text = input.value.trim();
   if (!text && !pendingFile) return;
+  if (!await createDraftChatIfNeeded()) return;
 
   // A reply may finish after the user has opened another conversation. Keep it
   // attached to the conversation that started it, then mark it as unread.
@@ -760,6 +773,8 @@ async function sendMessage() {
   responseHistory.push({ role: 'user', content: msgText });
   document.querySelectorAll('.context-shortcuts').forEach(el => el.remove());
   appendUserMsg(msgText, true, pendingFile);
+  // Keep the first message even if the model call later fails.
+  await saveChatSnapshot(responseChatId, responseHistory, responseScope);
 
   const filePayload = pendingFile ? Object.assign({}, pendingFile) : null;
   clearAttachment();

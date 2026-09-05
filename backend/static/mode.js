@@ -94,8 +94,8 @@ if (typeof loadChat === 'function') {
 
 if (typeof startNewChat === 'function') {
   const _startNewChat = startNewChat;
-  startNewChat = async function() {
-    await _startNewChat();
+  startNewChat = async function(...args) {
+    await _startNewChat(...args);
     setOpenClawMode('auto', true);
   };
 }

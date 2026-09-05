@@ -112,6 +112,10 @@ async def list_chats(_: str = Depends(verify_token)):
                 c = json.load(f)
             if _normalise_chat(c):
                 _save(c)
+            # Old clients created a record before the first message. Keep the
+            # file recoverable, but never show an unused placeholder again.
+            if not c.get("messages") and c.get("title") == "Nueva conversación":
+                continue
             chats.append(_summary(c))
         except Exception:
             pass
