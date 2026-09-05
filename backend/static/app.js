@@ -835,6 +835,8 @@ async function sendMessage() {
           addTool(bubble.parentElement.querySelector('.tools'), ev.name, 'running');
         } else if (ev.type === 'tool_done') {
           doneTool(bubble.parentElement.querySelector('.tools'), ev.name);
+        } else if (ev.type === 'notion_proposal') {
+          appendNotionProposal(bubble.parentElement, ev.plan);
         } else if (ev.type === 'done') {
           bubble.classList.remove('cursor');
           if (ev.workspace_id) {
@@ -1167,6 +1169,66 @@ function renderEnglishShortcuts(userText, responseText) {
   });
   document.getElementById('messages').appendChild(el);
   scrollBottom();
+}
+
+function appendNotionProposal(body, plan) {
+  if (!body || !plan || !plan.id) return;
+  const existing = body.querySelector('[data-notion-plan="' + plan.id + '"]');
+  if (existing) return;
+  const card = document.createElement('section');
+  card.className = 'notion-proposal';
+  card.dataset.notionPlan = plan.id;
+  card.innerHTML =
+    '<div class="notion-proposal-kicker">Propuesta para Notion</div>' +
+    '<div class="notion-proposal-operation">' + esc(plan.operation || 'Modificar Notion') + '</div>' +
+    '<div class="notion-proposal-row"><span>Destino</span><strong>' + esc(plan.destination || 'Destino verificado') + '</strong></div>' +
+    '<div class="notion-proposal-details">' + esc(plan.details || '') + '</div>' +
+    '<div class="notion-proposal-actions">' +
+      '<button class="notion-proposal-cancel" type="button" onclick="cancelNotionProposal(this)">Cancelar</button>' +
+      '<button class="notion-proposal-confirm" type="button" onclick="confirmNotionProposal(this)">Guardar en Notion</button>' +
+    '</div>';
+  const actions = body.querySelector('.msg-actions');
+  if (actions) body.insertBefore(card, actions); else body.appendChild(card);
+  scrollBottom();
+}
+
+async function confirmNotionProposal(button) {
+  const card = button.closest('.notion-proposal');
+  if (!card || card.classList.contains('completed')) return;
+  const planId = card.dataset.notionPlan;
+  button.disabled = true;
+  button.textContent = 'Guardando…';
+  try {
+    const response = await fetch('/api/notion-write-plans/' + encodeURIComponent(planId) + '/execute', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token },
+    });
+    const payload = await response.json().catch(function() { return {}; });
+    if (!response.ok) throw new Error(payload.detail || 'No se pudo guardar en Notion');
+    card.classList.add('completed');
+    card.querySelector('.notion-proposal-actions').innerHTML = '<span class="notion-proposal-success">✓ Guardado en Notion</span>';
+    const summary = payload.summary || {};
+    history.push({ role: 'assistant', content: '✓ Guardado en Notion: ' + (summary.operation || 'cambio confirmado') + '.' });
+    await saveCurrentChat();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = 'Guardar en Notion';
+    card.querySelector('.notion-proposal-details').textContent = error.message || 'No se pudo guardar la propuesta.';
+    card.classList.add('failed');
+  }
+}
+
+async function cancelNotionProposal(button) {
+  const card = button.closest('.notion-proposal');
+  if (!card || card.classList.contains('completed')) return;
+  const planId = card.dataset.notionPlan;
+  button.disabled = true;
+  try {
+    await fetch('/api/notion-write-plans/' + encodeURIComponent(planId), {
+      method: 'DELETE', headers: { Authorization: 'Bearer ' + token },
+    });
+  } catch (_) { /* The local cancellation state is still safe. */ }
+  card.classList.add('cancelled');
+  card.querySelector('.notion-proposal-actions').innerHTML = '<span class="notion-proposal-cancelled">Propuesta descartada</span>';
 }
 
 // ─── UI helpers ──────────────────────────────────────────────────────────────

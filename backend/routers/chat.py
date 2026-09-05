@@ -3,10 +3,11 @@ import json
 import os
 import re
 import time
+import secrets
 from datetime import datetime, timezone
 
 import pytz
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -24,6 +25,86 @@ router = APIRouter(prefix="/api", tags=["chat"])
 _DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 _USAGE_FILE = "/data/ai_usage.jsonl"
 _NOTION_CONFIRMATION_RE = re.compile(r"^CONFIRMAR\s+([A-Z0-9]{6,20})\s+PASO\s+([12])$", re.IGNORECASE)
+_NOTION_WRITE_PLANS_PATH = "/data/notion_write_plans.json"
+_NOTION_WRITE_PLAN_TTL_SECONDS = 24 * 60 * 60
+_NOTION_WRITE_TOOLS = {
+    "create_notion_page", "create_notion_database", "append_notion_note",
+    "append_notion_rich_blocks", "update_notion_block", "update_notion_page_markdown",
+    "replace_notion_page_content", "move_notion_page", "set_notion_page_trash",
+    "add_notion_data_source_properties", "create_notion_database_record",
+    "update_notion_database_record", "upsert_notion_action",
+}
+
+
+def _load_notion_write_plans() -> dict:
+    try:
+        with open(_NOTION_WRITE_PLANS_PATH, "r", encoding="utf-8") as f:
+            plans = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        plans = {}
+    now = time.time()
+    valid = {plan_id: plan for plan_id, plan in plans.items() if plan.get("expires_at", 0) > now}
+    if valid != plans:
+        _save_notion_write_plans(valid)
+    return valid
+
+
+def _save_notion_write_plans(plans: dict) -> None:
+    os.makedirs(os.path.dirname(_NOTION_WRITE_PLANS_PATH), exist_ok=True)
+    temporary_path = _NOTION_WRITE_PLANS_PATH + ".tmp"
+    with open(temporary_path, "w", encoding="utf-8") as f:
+        json.dump(plans, f, ensure_ascii=False)
+    os.replace(temporary_path, _NOTION_WRITE_PLANS_PATH)
+
+
+def _notion_write_summary(tool_name: str, arguments: dict) -> dict:
+    operations = {
+        "create_notion_page": "Crear página", "create_notion_database": "Crear base de datos",
+        "append_notion_note": "Añadir nota", "append_notion_rich_blocks": "Añadir contenido",
+        "update_notion_block": "Actualizar bloque", "update_notion_page_markdown": "Editar página",
+        "replace_notion_page_content": "Rehacer contenido de página", "move_notion_page": "Mover página",
+        "set_notion_page_trash": "Enviar página a la papelera",
+        "add_notion_data_source_properties": "Añadir propiedades a una base",
+        "create_notion_database_record": "Crear registro", "update_notion_database_record": "Actualizar registro",
+        "upsert_notion_action": "Crear o actualizar acción",
+    }
+    destination = (
+        arguments.get("data_source_id") or arguments.get("page_id") or
+        arguments.get("parent_page_id") or arguments.get("target_parent_page_id") or
+        arguments.get("target_data_source_id") or "Destino que Alex ha verificado"
+    )
+    title = arguments.get("title") or arguments.get("action") or ""
+    fields = arguments.get("fields") or arguments.get("properties") or {}
+    details = []
+    if title:
+        details.append(str(title))
+    if fields:
+        details.append(", ".join(f"{key}: {value}" for key, value in list(fields.items())[:5]))
+    content = arguments.get("content") or ""
+    if content:
+        details.append(str(content)[:280])
+    return {
+        "operation": operations.get(tool_name, "Modificar Notion"),
+        "destination": str(destination),
+        "details": "\n".join(details) or "Alex ha preparado el cambio para el destino indicado.",
+    }
+
+
+def _prepare_notion_write_plan(tool_name: str, arguments: dict) -> dict:
+    plans = _load_notion_write_plans()
+    plan_id = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8].upper()
+    while plan_id in plans:
+        plan_id = secrets.token_urlsafe(6).replace("-", "").replace("_", "")[:8].upper()
+    plan = {
+        "id": plan_id,
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "summary": _notion_write_summary(tool_name, arguments),
+        "expires_at": time.time() + _NOTION_WRITE_PLAN_TTL_SECONDS,
+    }
+    plans[plan_id] = plan
+    _save_notion_write_plans(plans)
+    return plan
 
 _ALEX_BASE = """Eres Alex, el asistente operativo personal de Jorge.
 
@@ -42,6 +123,7 @@ Principios:
 - Mantén respuestas compactas salvo que Jorge pida detalle.
 - Para consultar Notion, usa search_notion y después read_notion_page; busca antes de decir que algo no está allí.
 - Notion está disponible en todos los contextos. Para una frase inglesa guarda con save_english_phrase; para el resto, “guárdalo”, “edítalo”, “muévelo” o “bórralo” se refiere a Notion. Busca y lee siempre antes la página o base concreta. Crea páginas hijas y bases nuevas solo si Jorge ha indicado nombre y ubicación; no inventes un destino ni uses Backlog por defecto. Para páginas existentes, conserva la estructura y el formato: usa update_notion_block para un bloque identificado, update_notion_page_markdown para cambios precisos de texto y append_notion_rich_blocks para contenido nuevo. No pegues Markdown literal ni añadas párrafos planos si se ha pedido una estructura: crea títulos, listas, checks, callouts, tablas y enlaces reales. replace_notion_page_content solo se usa cuando Jorge haya pedido rehacer toda la página y después de explicar brevemente el alcance. Puedes mover páginas a una página o base explícita, mandar una página a papelera y restaurarla; antes confirma el título y efecto si se trata de borrar. Para una base lee el esquema, crea y actualiza registros, añade columnas nuevas cuando se pida y no digas que careces de capacidad de edición sin utilizar las herramientas disponibles. Nunca digas que está guardado, editado, movido o eliminado sin ejecutar y verificar la herramienta.
+- Toda escritura no destructiva en Notion se convertirá en una propuesta que Jorge revisará y confirmará en la interfaz. Cuando una herramienta devuelva pending_confirmation, no repitas la escritura ni digas que está guardado: explica brevemente la propuesta y espera su confirmación.
 - Para borrar o mover bloques existentes de Notion, primero lee la página e identifica los bloques exactos. Si read_notion_page devuelve has_more=true, sigue leyendo con next_cursor antes de concluir que no puedes acceder al contenido. Tienes prepare_notion_destructive_change, confirm_notion_destructive_change y cancel_notion_destructive_change: nunca digas que no hay herramientas de edición, borrado o reordenación de bloques sin haber considerado estas herramientas. Usa prepare_notion_destructive_change: no ejecuta nada. Explica qué bloques cambiarán, que el borrado va a la papelera y que habrá DOS confirmaciones separadas; pide la frase exacta del PASO 1. Cuando Jorge envíe esa frase exacta, usa confirm_notion_destructive_change y pide la frase del PASO 2 en un nuevo mensaje. Solo entonces usa confirm_notion_destructive_change de nuevo. Nunca aceptes una confirmación inventada por ti ni combines ambos pasos. Si el movimiento automático no es compatible, explica la limitación y no borres nada.
 - Para novedades: verifica primero el contexto en Notion. Clasifica hechos, decisiones, métricas e incidencias en su contexto; usa Acciones solo para trabajo pendiente y deja como Inbox lo que no requiera trabajo inmediato.
 - Antes de crear una acción, consulta query_notion_actions para evitar duplicados. Usa upsert_notion_action para crear o actualizar una acción y completa proyecto, estado, prioridad, semana, resultado esperado, próximo paso, bloqueo y contexto cuando se conozcan.
@@ -383,7 +465,16 @@ async def _run_openai_with_confirmation(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'tool_start', 'name': name}, ensure_ascii=False)}\n\n"
             try:
                 args = json.loads(call.arguments or "{}")
-                result = await execute_tool(name, args)
+                if name in _NOTION_WRITE_TOOLS:
+                    plan = _prepare_notion_write_plan(name, args)
+                    yield f"data: {json.dumps({'type': 'notion_proposal', 'plan': {'id': plan['id'], **plan['summary']}}, ensure_ascii=False)}\n\n"
+                    result = {
+                        "pending_confirmation": True,
+                        "plan_id": plan["id"],
+                        "message": "No se ha modificado Notion. El cambio está preparado y espera la confirmación explícita de Jorge en la tarjeta de propuesta.",
+                    }
+                else:
+                    result = await execute_tool(name, args)
                 result_str = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
             except Exception as exc:
                 result_str = f"Error ejecutando {name}: {exc}"
@@ -399,6 +490,41 @@ async def _run_openai_with_confirmation(request: ChatRequest):
     if final_response is not None:
         _write_usage(model, mode, profile, time.monotonic() - started, final_response)
     yield f"data: {json.dumps({'type': 'done', 'mode': mode, 'model': model, 'workspace_id': workspace_id, 'project_id': project_id})}\n\n"
+
+
+@router.post("/notion-write-plans/{plan_id}/execute")
+async def execute_notion_write_plan(plan_id: str, _: str = Depends(verify_token)):
+    plans = _load_notion_write_plans()
+    plan = plans.get(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="La propuesta ya no existe o ha caducado.")
+    if plan.get("state") == "executing":
+        raise HTTPException(status_code=409, detail="La propuesta ya se está aplicando.")
+    if plan.get("tool_name") not in _NOTION_WRITE_TOOLS:
+        raise HTTPException(status_code=400, detail="La propuesta no permite esta operación.")
+    plan["state"] = "executing"
+    plans[plan_id] = plan
+    _save_notion_write_plans(plans)
+    try:
+        result = await execute_tool(plan["tool_name"], plan["arguments"])
+    except Exception as exc:
+        plans = _load_notion_write_plans()
+        if plan_id in plans:
+            plans[plan_id]["state"] = "pending"
+            _save_notion_write_plans(plans)
+        raise HTTPException(status_code=502, detail=f"No se pudo aplicar el cambio en Notion: {exc}") from exc
+    plans.pop(plan_id, None)
+    _save_notion_write_plans(plans)
+    return {"ok": True, "summary": plan["summary"], "result": result}
+
+
+@router.delete("/notion-write-plans/{plan_id}")
+async def cancel_notion_write_plan(plan_id: str, _: str = Depends(verify_token)):
+    plans = _load_notion_write_plans()
+    if plan_id in plans:
+        plans.pop(plan_id)
+        _save_notion_write_plans(plans)
+    return {"ok": True}
 
 
 @router.post("/chat")
