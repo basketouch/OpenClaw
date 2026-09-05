@@ -252,7 +252,25 @@ header {
 .alex-bubble em { font-style: italic; color: #c0c0e0; }
 
 /* ── Tool indicators ── */
-.tools { display: flex; flex-direction: column; gap: 4px; }
+.tools { margin-top: 6px; }
+
+.tools-summary {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px;
+  padding: 5px 8px; border: 1px solid var(--border); border-radius: 7px;
+  background: transparent; color: var(--muted); font-size: 11px; font-weight: 500;
+  cursor: pointer;
+}
+
+.tools-summary:hover,
+.tools-summary:focus-visible { color: var(--text); border-color: rgba(124,58,237,.45); outline: none; }
+.tools-summary.hidden { display: none; }
+.tools-summary.running { color: #a78bfa; }
+.tools-summary-icon { font-size: 14px; line-height: 1; transition: transform .15s ease; }
+.tools.expanded .tools-summary-icon { transform: rotate(180deg); }
+.tools-summary-count { opacity: .72; }
+
+.tools-list { display: none; flex-direction: column; gap: 4px; margin-top: 6px; padding-left: 4px; }
+.tools.expanded .tools-list { display: flex; }
 
 .tool {
   display: inline-flex; align-items: center; gap: 6px;

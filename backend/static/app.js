@@ -1191,7 +1191,14 @@ function appendAssistantBubble() {
     '<div class="avatar alex-av">⚡</div>' +
     '<div class="msg-body">' +
       '<div class="bubble alex-bubble cursor"></div>' +
-      '<div class="tools"></div>' +
+      '<div class="tools" aria-live="polite">' +
+        '<button class="tools-summary hidden" type="button" onclick="toggleTools(this)" aria-expanded="false">' +
+          '<span class="tools-summary-icon" aria-hidden="true">⌄</span>' +
+          '<span class="tools-summary-text">Actividad de Alex</span>' +
+          '<span class="tools-summary-count"></span>' +
+        '</button>' +
+        '<div class="tools-list"></div>' +
+      '</div>' +
       '<div class="msg-actions">' +
         '<button class="copy-btn" onclick="copyBubble(this)" title="Copiar mensaje">' +
           '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>' +
@@ -1280,19 +1287,52 @@ function copyBubble(btn) {
   });
 }
 
+function getToolsList(container) {
+  return container ? (container.querySelector('.tools-list') || container) : null;
+}
+
+function refreshToolSummary(container) {
+  if (!container) return;
+  const list = getToolsList(container);
+  const summary = container.querySelector('.tools-summary');
+  if (!list || !summary) return;
+  const tools = Array.from(list.querySelectorAll('.tool'));
+  const running = tools.some(function(tool) { return tool.classList.contains('running'); });
+  summary.classList.toggle('hidden', tools.length === 0);
+  summary.classList.toggle('running', running);
+  const text = summary.querySelector('.tools-summary-text');
+  const count = summary.querySelector('.tools-summary-count');
+  if (text) text.textContent = running ? 'Alex está trabajando' : 'Actividad de Alex';
+  if (count) count.textContent = tools.length + ' ' + (tools.length === 1 ? 'acción' : 'acciones');
+}
+
+function toggleTools(button) {
+  const container = button.closest('.tools');
+  if (!container) return;
+  const expanded = container.classList.toggle('expanded');
+  button.setAttribute('aria-expanded', String(expanded));
+}
+
 function addTool(container, name, state) {
+  const list = getToolsList(container);
+  if (!list) return;
   const el = document.createElement('div');
   el.className = 'tool ' + state;
   el.dataset.tool = name;
   el.innerHTML = '<span class="tool-icon">' + (state === 'running' ? '⚙' : '✓') + '</span> ' + esc(name);
-  container.appendChild(el);
+  list.appendChild(el);
+  refreshToolSummary(container);
   scrollBottom();
 }
 
 function doneTool(container, name) {
-  if (!container) return;
-  const el = container.querySelector('[data-tool="' + name + '"]');
+  const list = getToolsList(container);
+  if (!list) return;
+  const matches = Array.from(list.querySelectorAll('[data-tool="' + name + '"]'));
+  const running = matches.filter(function(tool) { return tool.classList.contains('running'); });
+  const el = running[running.length - 1] || matches[matches.length - 1];
   if (el) { el.className = 'tool done'; el.innerHTML = '<span class="tool-icon">✓</span> ' + esc(name); }
+  refreshToolSummary(container);
 }
 
 function setDisabled(v) {
