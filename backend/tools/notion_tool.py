@@ -259,6 +259,90 @@ async def read_notion_data_source(data_source_id: str) -> dict:
     }
 
 
+def _generic_property_text(property_value: dict | None) -> str:
+    property_value = property_value or {}
+    kind = property_value.get("type")
+    if kind in {"title", "rich_text"}:
+        return _plain_text(property_value.get(kind))
+    if kind in {"select", "status"}:
+        return (property_value.get(kind) or {}).get("name", "")
+    if kind == "multi_select":
+        return ", ".join(item.get("name", "") for item in property_value.get("multi_select", []))
+    if kind == "number":
+        value = property_value.get("number")
+        return "" if value is None else str(value)
+    if kind == "date":
+        value = property_value.get("date") or {}
+        return " — ".join(part for part in [value.get("start", ""), value.get("end", "")] if part)
+    if kind == "checkbox":
+        return "Sí" if property_value.get("checkbox") else "No"
+    if kind in {"url", "email", "phone_number"}:
+        return str(property_value.get(kind) or "")
+    if kind == "people":
+        return ", ".join(person.get("name", "") for person in property_value.get("people", []))
+    if kind == "relation":
+        count = len(property_value.get("relation", []))
+        return "" if count == 0 else f"{count} relación(es)"
+    if kind == "formula":
+        formula = property_value.get("formula") or {}
+        formula_type = formula.get("type")
+        return str(formula.get(formula_type) or "") if formula_type else ""
+    if kind == "rollup":
+        rollup = property_value.get("rollup") or {}
+        if rollup.get("type") == "number":
+            return str(rollup.get("number") or "")
+        return _plain_text(rollup.get("array"))
+    return ""
+
+
+async def query_notion_data_source(
+    data_source_id: str,
+    query: str = "",
+    property_name: str = "",
+    property_value: str = "",
+    limit: int = 20,
+    start_cursor: str = "",
+) -> dict:
+    """List real records from a shared Notion data source without modifying it."""
+    data_source = await _request("GET", f"/data_sources/{data_source_id}")
+    schema = _data_source_schema(data_source)
+    if property_name and property_name not in schema:
+        return {"ok": False, "error": f"La columna '{property_name}' no existe", "properties": schema}
+
+    payload: dict[str, Any] = {"page_size": max(1, min(100, limit))}
+    if start_cursor.strip():
+        payload["start_cursor"] = start_cursor.strip()
+    result = await _request("POST", f"/data_sources/{data_source_id}/query", payload)
+    needle = _norm(query)
+    property_needle = _norm(property_value)
+    items = []
+    for page in result.get("results", []):
+        properties = {
+            name: _generic_property_text(value)
+            for name, value in (page.get("properties") or {}).items()
+        }
+        searchable = _norm(" ".join(properties.values()))
+        selected = _norm(properties.get(property_name, "")) if property_name else ""
+        if needle and needle not in searchable:
+            continue
+        if property_needle and property_needle not in selected:
+            continue
+        items.append({
+            "id": page.get("id"),
+            "url": page.get("url"),
+            "properties": properties,
+        })
+    return {
+        "ok": True,
+        "title": _plain_text(data_source.get("title")) or "Base de datos sin título",
+        "properties": schema,
+        "count": len(items),
+        "items": items,
+        "has_more": bool(result.get("has_more")),
+        "next_cursor": result.get("next_cursor") or "",
+    }
+
+
 _NEW_PROPERTY_TYPES = {
     "rich_text": {"rich_text": {}},
     "date": {"date": {}},
@@ -1101,6 +1185,23 @@ READ_DATA_SOURCE_DEF = {
     "name": "read_notion_data_source",
     "description": "Lee el esquema real de una base de datos de Notion antes de crear un registro. Úsala después de localizar la base con search_notion.",
     "input_schema": {"type": "object", "properties": {"data_source_id": {"type": "string"}}, "required": ["data_source_id"]},
+}
+
+QUERY_DATA_SOURCE_DEF = {
+    "name": "query_notion_data_source",
+    "description": "Lista registros reales de una base de Notion compartida, sin modificar nada. Úsala para responder qué filas existen o qué contiene una columna. Puedes filtrar por texto o por una columna concreta. Devuelve valores reales; no inventes registros.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "data_source_id": {"type": "string"},
+            "query": {"type": "string", "description": "Texto a buscar en cualquier columna"},
+            "property_name": {"type": "string", "description": "Nombre exacto de una columna para filtrar"},
+            "property_value": {"type": "string", "description": "Valor parcial a buscar en esa columna"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "start_cursor": {"type": "string", "description": "Cursor de la página anterior, si has_more es true"},
+        },
+        "required": ["data_source_id"],
+    },
 }
 
 ADD_DATA_SOURCE_PROPERTIES_DEF = {

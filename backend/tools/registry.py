@@ -53,7 +53,7 @@ _NOTION_BLOCK_CHANGE_TOOLS = {
 }
 
 _NOTION_SCHEMA_TOOLS = {
-    "read_notion_data_source", "add_notion_data_source_properties",
+    "read_notion_data_source", "query_notion_data_source", "add_notion_data_source_properties",
 }
 
 _NOTION_CREATION_TOOLS = {
@@ -69,7 +69,7 @@ _NOTION_TOOLS = {
     "search_notion", "read_notion_page", "create_notion_page", "create_notion_database",
     "append_notion_note", "append_notion_rich_blocks", "update_notion_block",
     "update_notion_page_markdown", "replace_notion_page_content", "move_notion_page",
-    "set_notion_page_trash", "read_notion_data_source", "add_notion_data_source_properties",
+    "set_notion_page_trash", "read_notion_data_source", "query_notion_data_source", "add_notion_data_source_properties",
     "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
     "upsert_notion_action", "prepare_notion_destructive_change", "confirm_notion_destructive_change",
     "cancel_notion_destructive_change",
@@ -171,10 +171,10 @@ from tools.english_tool import (
 from tools.notion_tool import (
     SEARCH_DEF as NOTION_SEARCH_DEF, READ_DEF as NOTION_READ_DEF, CREATE_PAGE_DEF as NOTION_CREATE_PAGE_DEF,
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
-    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, UPDATE_BLOCK_DEF, UPDATE_PAGE_MARKDOWN_DEF, REPLACE_PAGE_CONTENT_DEF, MOVE_PAGE_DEF, SET_PAGE_TRASH_DEF, READ_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
+    HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, UPDATE_BLOCK_DEF, UPDATE_PAGE_MARKDOWN_DEF, REPLACE_PAGE_CONTENT_DEF, MOVE_PAGE_DEF, SET_PAGE_TRASH_DEF, READ_DATA_SOURCE_DEF, QUERY_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
     PREPARE_DESTRUCTIVE_CHANGE_DEF, CONFIRM_DESTRUCTIVE_CHANGE_DEF, CANCEL_DESTRUCTIVE_CHANGE_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
-    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, update_notion_block, update_notion_page_markdown, replace_notion_page_content, move_notion_page, set_notion_page_trash, read_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
+    get_hornbills_hub, append_notion_note, append_notion_rich_blocks, update_notion_block, update_notion_page_markdown, replace_notion_page_content, move_notion_page, set_notion_page_trash, read_notion_data_source, query_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
     prepare_notion_destructive_change, confirm_notion_destructive_change, cancel_notion_destructive_change,
 )
 
@@ -226,6 +226,7 @@ register("get_the_analyst_destinations", get_the_analyst_destinations, THE_ANALY
 register("get_comunidad_destinations", get_comunidad_destinations, COMUNIDAD_DESTINATIONS_DEF)
 register("get_basketouch_hub_destinations", get_basketouch_hub_destinations, BASKETOUCH_HUB_DESTINATIONS_DEF)
 register("read_notion_data_source", read_notion_data_source, READ_DATA_SOURCE_DEF)
+register("query_notion_data_source", query_notion_data_source, QUERY_DATA_SOURCE_DEF)
 register("add_notion_data_source_properties", add_notion_data_source_properties, ADD_DATA_SOURCE_PROPERTIES_DEF)
 register("create_notion_database", create_notion_database, CREATE_DATABASE_DEF)
 register("create_notion_database_record", create_notion_database_record, CREATE_DATABASE_RECORD_DEF)
