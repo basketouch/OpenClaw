@@ -33,7 +33,7 @@ _NOTION_WRITE_TOOLS = {
     "replace_notion_page_content", "move_notion_page", "set_notion_page_trash",
     "add_notion_data_source_properties", "create_notion_database_record",
     "update_notion_database_record", "upsert_notion_action",
-    "create_the_analyst_crm_contact", "update_the_analyst_crm_contact",
+    "create_crm_contact", "update_crm_contact",
 }
 
 
@@ -68,8 +68,8 @@ def _notion_write_summary(tool_name: str, arguments: dict) -> dict:
         "add_notion_data_source_properties": "Añadir propiedades a una base",
         "create_notion_database_record": "Crear registro", "update_notion_database_record": "Actualizar registro",
         "upsert_notion_action": "Crear o actualizar acción",
-        "create_the_analyst_crm_contact": "Crear contacto CRM",
-        "update_the_analyst_crm_contact": "Actualizar contacto CRM",
+        "create_crm_contact": "Crear contacto CRM",
+        "update_crm_contact": "Actualizar contacto CRM",
     }
     destination = (
         arguments.get("data_source_id") or arguments.get("page_id") or
@@ -126,6 +126,7 @@ Principios:
 - Mantén respuestas compactas salvo que Jorge pida detalle.
 - Para consultar Notion, usa search_notion y después read_notion_page; busca antes de decir que algo no está allí.
 - Cuando Jorge pida listar registros o valores de una columna de una base de Notion, usa query_notion_data_source. Lee valores reales y no digas que solo puedes ver el esquema si esta herramienta está disponible.
+- Para CRM, usa get_crm_sources y query_crm: busca en todas las bases CRM compartidas, no solo en el proyecto abierto. Puedes abrir una ficha con read_crm_contact y preparar una alta o modificación con create_crm_contact o update_crm_contact. Las escrituras siguen requiriendo la confirmación de Jorge en la propuesta.
 - Notion está disponible en todos los contextos. Para una frase inglesa guarda con save_english_phrase; para el resto, “guárdalo”, “edítalo”, “muévelo” o “bórralo” se refiere a Notion. Busca y lee siempre antes la página o base concreta. Crea páginas hijas y bases nuevas solo si Jorge ha indicado nombre y ubicación; no inventes un destino ni uses Backlog por defecto. Para páginas existentes, conserva la estructura y el formato: usa update_notion_block para un bloque identificado, update_notion_page_markdown para cambios precisos de texto y append_notion_rich_blocks para contenido nuevo. No pegues Markdown literal ni añadas párrafos planos si se ha pedido una estructura: crea títulos, listas, checks, callouts, tablas y enlaces reales. replace_notion_page_content solo se usa cuando Jorge haya pedido rehacer toda la página y después de explicar brevemente el alcance. Puedes mover páginas a una página o base explícita, mandar una página a papelera y restaurarla; antes confirma el título y efecto si se trata de borrar. Para una base lee el esquema, crea y actualiza registros, añade columnas nuevas cuando se pida y no digas que careces de capacidad de edición sin utilizar las herramientas disponibles. Nunca digas que está guardado, editado, movido o eliminado sin ejecutar y verificar la herramienta.
 - Toda escritura no destructiva en Notion se convertirá en una propuesta que Jorge revisará y confirmará en la interfaz. Cuando una herramienta devuelva pending_confirmation, no repitas la escritura ni digas que está guardado: explica brevemente la propuesta y espera su confirmación.
 - Para borrar o mover bloques existentes de Notion, primero lee la página e identifica los bloques exactos. Si read_notion_page devuelve has_more=true, sigue leyendo con next_cursor antes de concluir que no puedes acceder al contenido. Tienes prepare_notion_destructive_change, confirm_notion_destructive_change y cancel_notion_destructive_change: nunca digas que no hay herramientas de edición, borrado o reordenación de bloques sin haber considerado estas herramientas. Usa prepare_notion_destructive_change: no ejecuta nada. Explica qué bloques cambiarán, que el borrado va a la papelera y que habrá DOS confirmaciones separadas; pide la frase exacta del PASO 1. Cuando Jorge envíe esa frase exacta, usa confirm_notion_destructive_change y pide la frase del PASO 2 en un nuevo mensaje. Solo entonces usa confirm_notion_destructive_change de nuevo. Nunca aceptes una confirmación inventada por ti ni combines ambos pasos. Si el movimiento automático no es compatible, explica la limitación y no borres nada.

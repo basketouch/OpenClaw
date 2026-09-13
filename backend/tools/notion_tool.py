@@ -343,10 +343,11 @@ async def query_notion_data_source(
     }
 
 
-# The CRM is deliberately a small, explicit part of The Analyst.  Resolving
-# these sources by their canonical titles keeps the configuration portable and
-# avoids exposing Notion IDs in prompts or browser code.
-_THE_ANALYST_CRM_SOURCES = {
+# The CRM is a transversal workspace capability. Resolving these sources by
+# canonical titles keeps the configuration portable and avoids exposing Notion
+# IDs in prompts or browser code.
+_CRM_SOURCES = {
+    "cutsports": "CRM — CutSports",
     "prospects": "Entrenadores — Clientes Potenciales",
     "ambassadors": "Entrenadores Embajadores",
     "testimonials": "Casos de éxito / Testimonios",
@@ -357,11 +358,11 @@ def _normalised_name(value: str) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().casefold())
 
 
-async def _find_the_analyst_crm_source(target: str) -> dict[str, Any]:
+async def _find_crm_source(target: str) -> dict[str, Any]:
     """Resolve one CRM source by its stable, human-readable Notion title."""
-    title = _THE_ANALYST_CRM_SOURCES.get(target)
+    title = _CRM_SOURCES.get(target)
     if not title:
-        raise ValueError("CRM no válido: usa prospects, ambassadors o testimonials")
+        raise ValueError("CRM no válido: usa cutsports, prospects, ambassadors o testimonials")
 
     result = await _request("POST", "/search", {
         "query": title,
@@ -390,32 +391,32 @@ async def _find_the_analyst_crm_source(target: str) -> dict[str, Any]:
     }
 
 
-async def get_the_analyst_crm_sources() -> dict:
-    """Return the CRM sources Alex can operate, including their real schemas."""
+async def get_crm_sources() -> dict:
+    """Return every CRM source Alex can operate, including their real schemas."""
     sources = []
     unavailable = []
-    for target in _THE_ANALYST_CRM_SOURCES:
+    for target in _CRM_SOURCES:
         try:
-            sources.append(await _find_the_analyst_crm_source(target))
+            sources.append(await _find_crm_source(target))
         except (RuntimeError, ValueError) as exc:
-            unavailable.append({"target": target, "title": _THE_ANALYST_CRM_SOURCES[target], "error": str(exc)})
+            unavailable.append({"target": target, "title": _CRM_SOURCES[target], "error": str(exc)})
     return {"ok": bool(sources), "sources": sources, "unavailable": unavailable}
 
 
-async def query_the_analyst_crm(
+async def query_crm(
     target: str = "all", query: str = "", limit: int = 20,
 ) -> dict:
-    """List real CRM contacts from one source or all The Analyst CRM sources."""
-    targets = list(_THE_ANALYST_CRM_SOURCES) if target == "all" else [target]
-    if any(item not in _THE_ANALYST_CRM_SOURCES for item in targets):
-        return {"ok": False, "error": "target debe ser all, prospects, ambassadors o testimonials"}
+    """List real CRM contacts from one source or every shared CRM source."""
+    targets = list(_CRM_SOURCES) if target == "all" else [target]
+    if any(item not in _CRM_SOURCES for item in targets):
+        return {"ok": False, "error": "target debe ser all, cutsports, prospects, ambassadors o testimonials"}
 
     records = []
     unavailable = []
     per_source_limit = max(1, min(100, limit))
     for item in targets:
         try:
-            source = await _find_the_analyst_crm_source(item)
+            source = await _find_crm_source(item)
             response = await query_notion_data_source(source["id"], query=query, limit=per_source_limit)
             for record in response.get("items", []):
                 records.append({"crm": item, "source": source["title"], **record})
@@ -429,35 +430,35 @@ async def query_the_analyst_crm(
     }
 
 
-async def read_the_analyst_crm_contact(page_id: str) -> dict:
-    """Read one individual CRM record after verifying that it belongs to this CRM."""
+async def read_crm_contact(page_id: str) -> dict:
+    """Read one individual CRM record after verifying that it belongs to the CRM."""
     page = await _request("GET", f"/pages/{page_id}")
     parent_id = (page.get("parent") or {}).get("data_source_id")
     allowed = set()
-    for target in _THE_ANALYST_CRM_SOURCES:
+    for target in _CRM_SOURCES:
         try:
-            allowed.add((await _find_the_analyst_crm_source(target))["id"])
+            allowed.add((await _find_crm_source(target))["id"])
         except RuntimeError:
             continue
     if parent_id not in allowed:
-        return {"ok": False, "error": "La ficha no pertenece al CRM de The Analyst"}
+        return {"ok": False, "error": "La ficha no pertenece a una base CRM compartida"}
     result = await read_notion_page(page_id)
     return {"ok": True, **result}
 
 
-async def create_the_analyst_crm_contact(
+async def create_crm_contact(
     target: str, title: str, fields: dict[str, Any] | None = None,
     content: str = "",
 ) -> dict:
-    """Create an explicitly approved CRM contact in the selected The Analyst source."""
-    source = await _find_the_analyst_crm_source(target)
+    """Create an explicitly approved contact in the selected CRM source."""
+    source = await _find_crm_source(target)
     result = await create_notion_database_record(source["id"], title, content=content, fields=fields or {})
     return {"crm": target, "source": source["title"], **result}
 
 
-async def update_the_analyst_crm_contact(page_id: str, fields: dict[str, Any]) -> dict:
+async def update_crm_contact(page_id: str, fields: dict[str, Any]) -> dict:
     """Update known fields on an existing individual CRM contact."""
-    verified = await read_the_analyst_crm_contact(page_id)
+    verified = await read_crm_contact(page_id)
     if not verified.get("ok"):
         return verified
     return await update_notion_database_record(page_id, fields)
@@ -1373,19 +1374,19 @@ UPDATE_DATABASE_RECORD_DEF = {
     "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {}}}, "required": ["page_id", "fields"]},
 }
 
-THE_ANALYST_CRM_SOURCES_DEF = {
-    "name": "get_the_analyst_crm_sources",
-    "description": "Localiza las tres bases operativas del CRM de The Analyst (prospectos, embajadores y testimonios) y devuelve sus esquemas reales. Úsala antes de consultar o modificar el CRM.",
+CRM_SOURCES_DEF = {
+    "name": "get_crm_sources",
+    "description": "Localiza todas las bases CRM compartidas con Alex (CRM CutSports, prospectos, embajadores y testimonios) y devuelve sus esquemas reales. Úsala antes de consultar o modificar contactos.",
     "input_schema": {"type": "object", "properties": {}, "required": []},
 }
 
-THE_ANALYST_CRM_QUERY_DEF = {
-    "name": "query_the_analyst_crm",
-    "description": "Busca y lista contactos reales del CRM de The Analyst. Puede consultar prospectos, embajadores, testimonios o todo el CRM. Devuelve fichas individuales reales, no solo métricas agregadas.",
+CRM_QUERY_DEF = {
+    "name": "query_crm",
+    "description": "Busca y lista contactos reales en todas las bases CRM compartidas con Alex. Puede consultar CRM CutSports, prospectos, embajadores, testimonios o todo el CRM. Devuelve fichas individuales reales, no solo métricas agregadas.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "target": {"type": "string", "enum": ["all", "prospects", "ambassadors", "testimonials"]},
+            "target": {"type": "string", "enum": ["all", "cutsports", "prospects", "ambassadors", "testimonials"]},
             "query": {"type": "string", "description": "Nombre, club, correo u otro texto del contacto."},
             "limit": {"type": "integer", "minimum": 1, "maximum": 100},
         },
@@ -1393,19 +1394,19 @@ THE_ANALYST_CRM_QUERY_DEF = {
     },
 }
 
-THE_ANALYST_CRM_READ_DEF = {
-    "name": "read_the_analyst_crm_contact",
-    "description": "Lee una ficha individual del CRM de The Analyst por su id, incluidas sus notas y contenido. Úsala después de localizar el contacto.",
+CRM_READ_DEF = {
+    "name": "read_crm_contact",
+    "description": "Lee una ficha individual de cualquier CRM compartido por su id, incluidas sus notas y contenido. Úsala después de localizar el contacto.",
     "input_schema": {"type": "object", "properties": {"page_id": {"type": "string"}}, "required": ["page_id"]},
 }
 
-THE_ANALYST_CRM_CREATE_DEF = {
-    "name": "create_the_analyst_crm_contact",
-    "description": "Crea una ficha nueva en el CRM de The Analyst. Úsala solo cuando Jorge haya confirmado que es un prospecto, embajador o testimonio autorizado. La creación se presenta para confirmación antes de aplicarse.",
+CRM_CREATE_DEF = {
+    "name": "create_crm_contact",
+    "description": "Crea una ficha nueva en una base CRM compartida. Úsala solo cuando Jorge haya confirmado que es un contacto real. La creación se presenta para confirmación antes de aplicarse.",
     "input_schema": {
         "type": "object",
         "properties": {
-            "target": {"type": "string", "enum": ["prospects", "ambassadors", "testimonials"]},
+            "target": {"type": "string", "enum": ["cutsports", "prospects", "ambassadors", "testimonials"]},
             "title": {"type": "string"},
             "fields": {"type": "object", "additionalProperties": {}},
             "content": {"type": "string"},
@@ -1414,9 +1415,9 @@ THE_ANALYST_CRM_CREATE_DEF = {
     },
 }
 
-THE_ANALYST_CRM_UPDATE_DEF = {
-    "name": "update_the_analyst_crm_contact",
-    "description": "Actualiza campos de una ficha individual ya localizada en el CRM de The Analyst. No reemplaza el contenido de la ficha y se presenta para confirmación antes de aplicarse.",
+CRM_UPDATE_DEF = {
+    "name": "update_crm_contact",
+    "description": "Actualiza campos de una ficha individual ya localizada en cualquier CRM compartido. No reemplaza el contenido de la ficha y se presenta para confirmación antes de aplicarse.",
     "input_schema": {
         "type": "object",
         "properties": {"page_id": {"type": "string"}, "fields": {"type": "object", "additionalProperties": {}}},

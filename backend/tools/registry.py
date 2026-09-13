@@ -73,8 +73,7 @@ _NOTION_TOOLS = {
     "create_notion_database_record", "update_notion_database_record", "query_notion_actions",
     "upsert_notion_action", "prepare_notion_destructive_change", "confirm_notion_destructive_change",
     "cancel_notion_destructive_change",
-    "get_the_analyst_crm_sources", "query_the_analyst_crm", "read_the_analyst_crm_contact",
-    "create_the_analyst_crm_contact", "update_the_analyst_crm_contact",
+    "get_crm_sources", "query_crm", "read_crm_contact", "create_crm_contact", "update_crm_contact",
 }
 
 
@@ -175,13 +174,11 @@ from tools.notion_tool import (
     QUERY_ACTIONS_DEF as NOTION_QUERY_ACTIONS_DEF, UPSERT_ACTION_DEF as NOTION_UPSERT_ACTION_DEF,
     HORNBILLS_HUB_DEF, APPEND_NOTE_DEF, APPEND_RICH_BLOCKS_DEF, UPDATE_BLOCK_DEF, UPDATE_PAGE_MARKDOWN_DEF, REPLACE_PAGE_CONTENT_DEF, MOVE_PAGE_DEF, SET_PAGE_TRASH_DEF, READ_DATA_SOURCE_DEF, QUERY_DATA_SOURCE_DEF, ADD_DATA_SOURCE_PROPERTIES_DEF, CREATE_DATABASE_DEF, CREATE_DATABASE_RECORD_DEF, UPDATE_DATABASE_RECORD_DEF,
     PREPARE_DESTRUCTIVE_CHANGE_DEF, CONFIRM_DESTRUCTIVE_CHANGE_DEF, CANCEL_DESTRUCTIVE_CHANGE_DEF,
-    THE_ANALYST_CRM_SOURCES_DEF, THE_ANALYST_CRM_QUERY_DEF, THE_ANALYST_CRM_READ_DEF,
-    THE_ANALYST_CRM_CREATE_DEF, THE_ANALYST_CRM_UPDATE_DEF,
+    CRM_SOURCES_DEF, CRM_QUERY_DEF, CRM_READ_DEF, CRM_CREATE_DEF, CRM_UPDATE_DEF,
     search_notion, read_notion_page, create_notion_page, query_notion_actions, upsert_notion_action,
     get_hornbills_hub, append_notion_note, append_notion_rich_blocks, update_notion_block, update_notion_page_markdown, replace_notion_page_content, move_notion_page, set_notion_page_trash, read_notion_data_source, query_notion_data_source, add_notion_data_source_properties, create_notion_database, create_notion_database_record, update_notion_database_record,
     prepare_notion_destructive_change, confirm_notion_destructive_change, cancel_notion_destructive_change,
-    get_the_analyst_crm_sources, query_the_analyst_crm, read_the_analyst_crm_contact,
-    create_the_analyst_crm_contact, update_the_analyst_crm_contact,
+    get_crm_sources, query_crm, read_crm_contact, create_crm_contact, update_crm_contact,
 )
 
 register("get_datetime", get_datetime, DATETIME_DEF)
@@ -225,11 +222,11 @@ register("set_notion_page_trash", set_notion_page_trash, SET_PAGE_TRASH_DEF)
 register("prepare_notion_destructive_change", prepare_notion_destructive_change, PREPARE_DESTRUCTIVE_CHANGE_DEF)
 register("confirm_notion_destructive_change", confirm_notion_destructive_change, CONFIRM_DESTRUCTIVE_CHANGE_DEF)
 register("cancel_notion_destructive_change", cancel_notion_destructive_change, CANCEL_DESTRUCTIVE_CHANGE_DEF)
-register("get_the_analyst_crm_sources", get_the_analyst_crm_sources, THE_ANALYST_CRM_SOURCES_DEF)
-register("query_the_analyst_crm", query_the_analyst_crm, THE_ANALYST_CRM_QUERY_DEF)
-register("read_the_analyst_crm_contact", read_the_analyst_crm_contact, THE_ANALYST_CRM_READ_DEF)
-register("create_the_analyst_crm_contact", create_the_analyst_crm_contact, THE_ANALYST_CRM_CREATE_DEF)
-register("update_the_analyst_crm_contact", update_the_analyst_crm_contact, THE_ANALYST_CRM_UPDATE_DEF)
+register("get_crm_sources", get_crm_sources, CRM_SOURCES_DEF)
+register("query_crm", query_crm, CRM_QUERY_DEF)
+register("read_crm_contact", read_crm_contact, CRM_READ_DEF)
+register("create_crm_contact", create_crm_contact, CRM_CREATE_DEF)
+register("update_crm_contact", update_crm_contact, CRM_UPDATE_DEF)
 register("get_hornbills_destinations", get_hornbills_destinations, DESTINATIONS_DEF)
 register("get_cutsports_destinations", get_cutsports_destinations, CUTSPORTS_DESTINATIONS_DEF)
 register("get_drawsports_destinations", get_drawsports_destinations, DRAWSPORTS_DESTINATIONS_DEF)
