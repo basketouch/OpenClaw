@@ -33,6 +33,7 @@ _NOTION_WRITE_TOOLS = {
     "replace_notion_page_content", "move_notion_page", "set_notion_page_trash",
     "add_notion_data_source_properties", "create_notion_database_record",
     "update_notion_database_record", "upsert_notion_action",
+    "create_the_analyst_crm_contact", "update_the_analyst_crm_contact",
 }
 
 
@@ -67,11 +68,13 @@ def _notion_write_summary(tool_name: str, arguments: dict) -> dict:
         "add_notion_data_source_properties": "Añadir propiedades a una base",
         "create_notion_database_record": "Crear registro", "update_notion_database_record": "Actualizar registro",
         "upsert_notion_action": "Crear o actualizar acción",
+        "create_the_analyst_crm_contact": "Crear contacto CRM",
+        "update_the_analyst_crm_contact": "Actualizar contacto CRM",
     }
     destination = (
         arguments.get("data_source_id") or arguments.get("page_id") or
         arguments.get("parent_page_id") or arguments.get("target_parent_page_id") or
-        arguments.get("target_data_source_id") or "Destino que Alex ha verificado"
+        arguments.get("target_data_source_id") or arguments.get("target") or "Destino que Alex ha verificado"
     )
     title = arguments.get("title") or arguments.get("action") or ""
     fields = arguments.get("fields") or arguments.get("properties") or {}

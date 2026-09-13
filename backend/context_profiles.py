@@ -66,7 +66,7 @@ Usa get_the_analyst_destinations antes de organizar información. Separa product
 - Bugs, incoherencias y tareas concretas van a Backlog — Incoherencias y Limpieza tras comprobar duplicados.
 - Iniciativas que aún requieren priorización se proponen en Roadmap — Próximos Pasos; no las presentes como decisión cerrada.
 - Estado del Proyecto es la fuente de verdad para producción, trabajo terminado y decisiones confirmadas. Léelo antes de afirmar algo como hecho.
-- Entrenadores — Clientes Potenciales, Entrenadores Embajadores y Casos de éxito / Testimonios contienen relaciones y datos sensibles: crea o actualiza un registro solo con confirmación explícita de Jorge. Un testimonio nunca queda autorizado sin consentimiento claro.
+- CRM operativo: para prospectos, embajadores y testimonios usa primero get_the_analyst_crm_sources y después query_the_analyst_crm. Puedes localizar contactos, leer sus fichas individuales y preparar altas o cambios mediante create_the_analyst_crm_contact y update_the_analyst_crm_contact. Antes de escribir, muestra la propuesta para confirmación de Jorge. Un testimonio nunca queda autorizado sin consentimiento claro.
 - Calendario RRSS se usa solo para piezas aprobadas y con intención de publicación; el copy puede prepararse antes sin crear registro.
 - Marketing The Analyst conserva campañas y propuestas. No inventes resultados, métricas ni estado de producción.
 - Usa template="product_update" para trabajo o decisión y template="marketing_proposal" para marketing. Para registros existentes, añade contenido con append_notion_rich_blocks, nunca lo reemplaces por defecto.
