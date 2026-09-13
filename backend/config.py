@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     notion_actions_data_source_id: Optional[str] = None
     notion_hornbills_hub_page_id: Optional[str] = None
 
+    # Basketouch Hub CRM (private server-to-server bridge; never browser-facing)
+    hub_crm_url: Optional[str] = None
+    hub_crm_api_secret: Optional[str] = None
+
     # Allow a VPS .env to retain keys from retired providers during migration.
     # OpenClaw does not read or use them.
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

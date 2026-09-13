@@ -76,6 +76,8 @@ _NOTION_TOOLS = {
     "get_crm_sources", "query_crm", "read_crm_contact", "create_crm_contact", "update_crm_contact",
 }
 
+_HUB_CRM_TOOLS = {"get_hub_crm_summary", "search_hub_crm_contacts", "read_hub_crm_contact"}
+
 
 TOOL_PROFILES: dict[str, set[str]] = {
     "general": {
@@ -129,7 +131,7 @@ TOOL_PROFILES: dict[str, set[str]] = {
 
 
 def get_profile_tools(profile: str) -> list[dict]:
-    return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]) | _NOTION_TOOLS)
+    return get_openai_tool_definitions(TOOL_PROFILES.get(profile, TOOL_PROFILES["general"]) | _NOTION_TOOLS | _HUB_CRM_TOOLS)
 
 
 from tools.datetime_tool import DEFINITION as DATETIME_DEF
@@ -150,6 +152,10 @@ from comunidad_catalog import DESTINATIONS_DEF as COMUNIDAD_DESTINATIONS_DEF, ge
 from basketouch_hub_catalog import DESTINATIONS_DEF as BASKETOUCH_HUB_DESTINATIONS_DEF, get_basketouch_hub_destinations
 from tools.admin_tool import SHELL_DEF, HOST_SHELL_DEF, run_shell, run_host_shell
 from tools.telegram_tool import SEND_TELEGRAM_DEF, send_telegram
+from tools.hub_crm_tool import (
+    SUMMARY_DEF as HUB_CRM_SUMMARY_DEF, SEARCH_DEF as HUB_CRM_SEARCH_DEF, READ_DEF as HUB_CRM_READ_DEF,
+    get_hub_crm_summary, search_hub_crm_contacts, read_hub_crm_contact,
+)
 from tools.supabase_tool import (
     QUERY_DEF as NF_QUERY_DEF, INSERT_DEF as NF_INSERT_DEF, UPDATE_DEF as NF_UPDATE_DEF,
     query_newsflow, insert_newsflow, update_newsflow,
@@ -194,6 +200,9 @@ register("reply_email", reply_email, REPLY_EMAIL_DEF)
 register("run_shell", run_shell, SHELL_DEF)
 register("host_shell", run_host_shell, HOST_SHELL_DEF)
 register("send_telegram", send_telegram, SEND_TELEGRAM_DEF)
+register("get_hub_crm_summary", get_hub_crm_summary, HUB_CRM_SUMMARY_DEF)
+register("search_hub_crm_contacts", search_hub_crm_contacts, HUB_CRM_SEARCH_DEF)
+register("read_hub_crm_contact", read_hub_crm_contact, HUB_CRM_READ_DEF)
 register("query_newsflow", query_newsflow, NF_QUERY_DEF)
 register("insert_newsflow", insert_newsflow, NF_INSERT_DEF)
 register("update_newsflow", update_newsflow, NF_UPDATE_DEF)

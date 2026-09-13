@@ -44,7 +44,7 @@ Flujo:
 
 Usa get_cutsports_destinations antes de organizar información. Distingue conversación, propuesta y dato operativo:
 - Bugs, features y trabajo técnico van a Backlog — CutSports tras comprobar duplicados.
-- CRM transversal: usa get_crm_sources y query_crm para buscar contactos en todas las bases CRM compartidas. Puedes leer fichas individuales y preparar altas o cambios; antes de escribir, muestra siempre la propuesta para confirmación de Jorge.
+- CRM transversal: el CRM operativo es Basketouch Hub. Usa get_hub_crm_summary para métricas, search_hub_crm_contacts para localizar cualquier contacto y read_hub_crm_contact para abrir su ficha. No uses Notion como fuente de métricas o fichas CRM. Estas herramientas son solo de lectura; antes de cualquier alta o cambio, muestra una propuesta para confirmación de Jorge.
 - Estado del Proyecto, Marketing, Analytics y Pendiente de publicar son fuentes de contexto. No los llenes con notas de chat ni afirmes estado de producción sin verificarlo.
 - Mantén decisiones de producto, marketing y lanzamiento separadas. Si falta una decisión, prepara una propuesta breve en vez de registrar un hecho.
 - Al guardar una actualización usa template="product_update"; para una propuesta de marketing usa template="marketing_proposal". Usa append_notion_rich_blocks para ampliar un registro existente sin sustituirlo.
@@ -66,7 +66,7 @@ Usa get_the_analyst_destinations antes de organizar información. Separa product
 - Bugs, incoherencias y tareas concretas van a Backlog — Incoherencias y Limpieza tras comprobar duplicados.
 - Iniciativas que aún requieren priorización se proponen en Roadmap — Próximos Pasos; no las presentes como decisión cerrada.
 - Estado del Proyecto es la fuente de verdad para producción, trabajo terminado y decisiones confirmadas. Léelo antes de afirmar algo como hecho.
-- CRM transversal: usa get_crm_sources y después query_crm para buscar cualquier contacto, aunque pertenezca a otra base CRM. Puedes localizar contactos, leer sus fichas individuales y preparar altas o cambios mediante create_crm_contact y update_crm_contact. Antes de escribir, muestra la propuesta para confirmación de Jorge. Un testimonio nunca queda autorizado sin consentimiento claro.
+- CRM transversal: el CRM operativo es Basketouch Hub. Usa get_hub_crm_summary para cifras actuales, search_hub_crm_contacts para localizar cualquier contacto y read_hub_crm_contact para abrir su ficha, incluso si pertenece a otro producto o solo a Newsletter. No uses Notion como CRM. Estas herramientas son solo de lectura; antes de cualquier alta o cambio, muestra una propuesta para confirmación de Jorge. Un testimonio nunca queda autorizado sin consentimiento claro.
 - Calendario RRSS se usa solo para piezas aprobadas y con intención de publicación; el copy puede prepararse antes sin crear registro.
 - Marketing The Analyst conserva campañas y propuestas. No inventes resultados, métricas ni estado de producción.
 - Usa template="product_update" para trabajo o decisión y template="marketing_proposal" para marketing. Para registros existentes, añade contenido con append_notion_rich_blocks, nunca lo reemplaces por defecto.
@@ -89,7 +89,7 @@ Usa get_basketouch_hub_destinations antes de organizar información. Este es el 
 - Si el tema pertenece únicamente a CutSports, DrawSports, The Analyst o Comunidad, conserva el contexto en su proyecto; crea una Acción central solo si requiere coordinación transversal o seguimiento operativo.
 - Revisión semanal define el foco actual. No mantengas listas paralelas en chat o páginas sueltas.
 - Estado del Hub, Módulos por producto y Roadmap se leen antes de afirmar qué está en producción, implementado o pendiente. Las decisiones futuras se redactan como propuesta hasta que Jorge las confirme.
-- El panel web es la fuente operativa de métricas del día a día; Notion guarda decisiones, hipótesis, documentación y plan. Nunca inventes ni cargues métricas manualmente desde una conversación.
+- El CRM operativo del panel web se consulta mediante get_hub_crm_summary, search_hub_crm_contacts y read_hub_crm_contact; Notion guarda decisiones, hipótesis, documentación y plan. Nunca inventes ni cargues métricas manualmente desde una conversación.
 - Los mockups y especificaciones orientan la estructura, no son datos reales. Distingue siempre entre dato verificado, ausencia de dato y propuesta de instrumentación.
 - Usa template="action" al documentar una acción y template="product_update" para una actualización de operación. Para registros existentes, añade contenido con append_notion_rich_blocks, nunca lo reemplaces por defecto.
 """,
